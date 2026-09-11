@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <title>Sethoria Atlas — Prototipo A</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">SA</div>
+        <div>
+          <strong>Sethoria Atlas</strong>
+          <small>Prototipo A</small>
+        </div>
+      </div>
+
+      <div class="sidebar-actions">
+        <button id="homeBtn" class="nav-button active">Inicio</button>
+        <button id="registryBtn" class="nav-button">Registro maestro</button>
+        <button id="linkerBtn" class="nav-button">Hipervinculador rápido</button>
+      </div>
+
+      <div class="sidebar-title">Categorías</div>
+      <nav id="categoryNav" class="category-nav"></nav>
+
+      <div class="sidebar-footer">
+        <button id="exportBtn" class="secondary-button">Exportar respaldo</button>
+        <label class="secondary-button file-label">
+          Importar respaldo
+          <input id="importInput" type="file" accept=".json,application/json" hidden />
+        </label>
+        <div id="storageStatus" class="storage-status">Almacenamiento local activo</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="search-wrap">
+          <input id="globalSearch" type="search" placeholder="Buscar en Sethoria Atlas…" autocomplete="off" />
+          <div id="searchResults" class="search-results hidden"></div>
+        </div>
+        <button id="newEntityBtn" class="primary-button">+ Nuevo elemento</button>
+      </header>
+
+      <section id="view"></section>
+    </main>
+  </div>
+
+  <dialog id="entityDialog">
+    <form id="entityForm" method="dialog" class="dialog-card">
+      <div class="dialog-header">
+        <div>
+          <small>NUEVO ELEMENTO</small>
+          <h2>Registrar entidad</h2>
+        </div>
+        <button type="button" id="closeDialogBtn" class="icon-button">×</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          Título
+          <input id="entityTitle" required placeholder="Ej. Esteban" />
+        </label>
+        <label>
+          Categoría
+          <select id="entityCategory" required></select>
+        </label>
+        <label>
+          Etiqueta maestra
+          <input id="entityMasterTag" placeholder="Ej. personaje_esteban" />
+        </label>
+        <label>
+          Alias
+          <input id="entityAliases" placeholder="Separados por comas" />
+        </label>
+        <label class="full">
+          Etiquetas secundarias
+          <input id="entityTags" placeholder="Ej. libro-1, grupo-principal, México" />
+        </label>
+        <label class="full">
+          Resumen / nota base
+          <textarea id="entitySummary" rows="5" placeholder="Información breve del elemento…"></textarea>
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" id="cancelDialogBtn" class="secondary-button">Cancelar</button>
+        <button type="submit" class="primary-button">Guardar localmente</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="data/demo-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
