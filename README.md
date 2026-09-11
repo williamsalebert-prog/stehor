@@ -1,39 +1,60 @@
-# Sethoria Atlas — Prototipo A.1 (Interfaz)
+# Sethoria Atlas — Prototipo A.2
 
-Revisión visual del Prototipo A. Mantiene el mismo núcleo de datos y se concentra en hacer la interfaz más clara, compacta y agradable.
+Segunda pasada de interfaz. Esta versión conserva el núcleo del Prototipo A/A.1 y se concentra en navegación, densidad visual y comodidad de uso.
 
-## Cambios principales
+## Cambios de A.2
 
-- Modo oscuro profesional como interfaz base.
-- Inicio simplificado: búsqueda, categorías y herramientas.
-- Las tarjetas completas son clicables; ya no requieren un botón «Abrir».
-- Registro maestro e Hipervinculador movidos al bloque de herramientas, al final de la navegación.
-- Botones permanentes de **Regresar** e **Inicio**.
-- Logotipo/nombre de Sethoria Atlas vuelve al Inicio al hacer clic.
-- Búsqueda global con paleta flotante.
-- Atajos:
-  - `Ctrl + K` o `/`: buscar.
-  - `N`: nuevo elemento.
-  - `Alt + ←`: regresar.
-  - `Esc`: cerrar búsqueda.
+- Se eliminó **Inicio** de la barra lateral: hacer clic en el logotipo vuelve al inicio.
+- Barra lateral **ocultable/colapsable** desde `☰`.
+- El estado colapsado se recuerda en el navegador.
+- Solo existe **un botón principal `+ Nuevo`**, en la barra superior.
+- Se eliminó el segundo `+ Nuevo` de las categorías.
+- La búsqueda grande vive en **Inicio**.
+- Fuera de Inicio queda un botón compacto de búsqueda global.
+- `Ctrl + K` y `/` abren la búsqueda desde cualquier lugar.
+- Pantalla de Inicio rehecha:
+  - buscador,
+  - recientes,
+  - favoritos,
+  - categorías agrupadas y compactas,
+  - herramientas al final.
+- Tarjetas de categorías mucho más compactas.
+- Tarjetas de entidades completamente clicables.
+- Favoritos con `☆ / ★`.
+- Se añadió “Continuar” con elementos recientes.
+- Barra superior más compacta.
+- Botón de regresar con historial interno.
+- Herramientas técnicas al final de la navegación.
+- Interfaz oscura refinada con textura muy sutil, iluminación ambiental y bordes menos bruscos.
+- Microanimaciones más pequeñas y uniformes.
 - Zonas de clic más grandes.
-- Animaciones pequeñas y rápidas.
-- Barra lateral más compacta.
-- Interfaz responsive para pantallas más pequeñas.
-- Exportar/importar respaldo permanece disponible, pero menos invasivo.
-- No se han añadido todavía mapas, cronologías avanzadas ni gráficos de relaciones.
+- Diseño responsive mejorado.
+- Exportar/importar respaldo conserva también favoritos y recientes.
 
-## Uso en GitHub Pages
+## Datos y compatibilidad
+
+A.2 sigue usando la misma base IndexedDB del prototipo anterior:
+
+`sethoria-atlas-prototipo-a`
+
+Por eso, si publicas A.2 en el mismo origen/URL de GitHub Pages, los elementos locales anteriores deberían seguir disponibles en ese navegador.
+
+## Publicación
 
 No requiere Node, npm ni compilación.
 
-Sube el contenido de esta carpeta al repositorio y publica la raíz mediante GitHub Pages.
+Sube los archivos de esta carpeta a la raíz del repositorio que publica GitHub Pages.
 
-## Persistencia
+## Lo que todavía NO incluye
 
-Los datos creados en la interfaz siguen usando IndexedDB del navegador.  
-`Exportar respaldo` crea un JSON recuperable.
+A propósito todavía no entran:
 
-## Nota de compatibilidad
+- mapas interactivos,
+- líneas de tiempo reales,
+- árbol genealógico,
+- redes de grupos,
+- relaciones visuales,
+- vistas especializadas de criaturas,
+- módulo técnico de barcos/batallas.
 
-Usa el mismo nombre de base IndexedDB que el Prototipo A para conservar los elementos locales creados durante las pruebas en el mismo navegador/origen, siempre que la URL/origen sea el mismo.
+La idea es validar primero que la interfaz base ya sea cómoda antes de cargar esos módulos encima.
