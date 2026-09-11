@@ -3,52 +3,102 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#111827" />
-  <title>Sethoria Atlas — Prototipo A</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <title>Sethoria Atlas — Prototipo A.1</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">SA</div>
-        <div>
+    <aside class="sidebar" aria-label="Navegación principal">
+      <button id="brandHome" class="brand" title="Ir al inicio">
+        <div class="brand-mark">S</div>
+        <div class="brand-copy">
           <strong>Sethoria Atlas</strong>
-          <small>Prototipo A</small>
+          <small>Prototipo A.1</small>
         </div>
-      </div>
+      </button>
 
-      <div class="sidebar-actions">
-        <button id="homeBtn" class="nav-button active">Inicio</button>
-        <button id="registryBtn" class="nav-button">Registro maestro</button>
-        <button id="linkerBtn" class="nav-button">Hipervinculador rápido</button>
+      <div class="sidebar-section">
+        <button id="homeBtn" class="nav-button active" data-nav="home">
+          <span class="nav-icon">⌂</span><span>Inicio</span>
+        </button>
       </div>
 
       <div class="sidebar-title">Categorías</div>
       <nav id="categoryNav" class="category-nav"></nav>
 
+      <div class="sidebar-title tools-title">Herramientas</div>
+      <div class="sidebar-actions">
+        <button id="registryBtn" class="nav-button" data-nav="registry">
+          <span class="nav-icon">⌗</span><span>Registro maestro</span>
+        </button>
+        <button id="linkerBtn" class="nav-button" data-nav="linker">
+          <span class="nav-icon">↗</span><span>Hipervinculador rápido</span>
+        </button>
+      </div>
+
       <div class="sidebar-footer">
-        <button id="exportBtn" class="secondary-button">Exportar respaldo</button>
-        <label class="secondary-button file-label">
-          Importar respaldo
-          <input id="importInput" type="file" accept=".json,application/json" hidden />
-        </label>
-        <div id="storageStatus" class="storage-status">Almacenamiento local activo</div>
+        <div class="footer-row">
+          <button id="exportBtn" class="icon-action" title="Exportar respaldo">⇩</button>
+          <label class="icon-action file-label" title="Importar respaldo">
+            ⇧
+            <input id="importInput" type="file" accept=".json,application/json" hidden />
+          </label>
+          <button id="shortcutsBtn" class="icon-action" title="Atajos de teclado">⌨</button>
+        </div>
+        <div id="storageStatus" class="storage-status">
+          <span class="status-dot"></span> Datos locales activos
+        </div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div class="search-wrap">
-          <input id="globalSearch" type="search" placeholder="Buscar en Sethoria Atlas…" autocomplete="off" />
-          <div id="searchResults" class="search-results hidden"></div>
+        <div class="topbar-left">
+          <button id="backBtn" class="round-button" title="Regresar (Alt+←)" aria-label="Regresar">←</button>
+          <button id="topHomeBtn" class="round-button" title="Inicio" aria-label="Inicio">⌂</button>
+          <div id="breadcrumb" class="breadcrumb">Inicio</div>
         </div>
-        <button id="newEntityBtn" class="primary-button">+ Nuevo elemento</button>
+        <div class="topbar-right">
+          <button id="quickSearchBtn" class="ghost-button" title="Buscar (Ctrl+K)">⌕ <span>Buscar</span><kbd>Ctrl K</kbd></button>
+          <button id="newEntityBtn" class="primary-button" title="Nuevo elemento (N)">＋ Nuevo</button>
+        </div>
       </header>
 
       <section id="view"></section>
     </main>
   </div>
+
+  <div id="commandPalette" class="palette-backdrop hidden" aria-hidden="true">
+    <div class="palette">
+      <div class="palette-input-wrap">
+        <span>⌕</span>
+        <input id="paletteSearch" type="search" placeholder="Buscar personajes, lugares, eventos…" autocomplete="off" />
+        <kbd>Esc</kbd>
+      </div>
+      <div id="paletteResults" class="palette-results"></div>
+      <div class="palette-hint">↑ ↓ navegar · Enter abrir · Esc cerrar</div>
+    </div>
+  </div>
+
+  <dialog id="shortcutsDialog">
+    <div class="dialog-card shortcuts-card">
+      <div class="dialog-header">
+        <div>
+          <small>ATAJOS</small>
+          <h2>Teclado</h2>
+        </div>
+        <button type="button" class="icon-button" onclick="document.querySelector('#shortcutsDialog').close()">×</button>
+      </div>
+      <div class="shortcut-grid">
+        <div><kbd>Ctrl</kbd> + <kbd>K</kbd><span>Buscar</span></div>
+        <div><kbd>/</kbd><span>Buscar</span></div>
+        <div><kbd>N</kbd><span>Nuevo elemento</span></div>
+        <div><kbd>Alt</kbd> + <kbd>←</kbd><span>Regresar</span></div>
+        <div><kbd>Esc</kbd><span>Cerrar panel</span></div>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="entityDialog">
     <form id="entityForm" method="dialog" class="dialog-card">

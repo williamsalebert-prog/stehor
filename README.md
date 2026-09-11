@@ -1,59 +1,39 @@
-# Sethoria Atlas — Prototipo A
+# Sethoria Atlas — Prototipo A.1 (Interfaz)
 
-Primer prototipo de arquitectura para una aplicación web personal de organización y análisis de **Sethoria**.
+Revisión visual del Prototipo A. Mantiene el mismo núcleo de datos y se concentra en hacer la interfaz más clara, compacta y agradable.
 
-## Objetivo de esta versión
+## Cambios principales
 
-Validar la base antes de construir mapas, cronologías avanzadas, árboles genealógicos y gráficos de relaciones.
+- Modo oscuro profesional como interfaz base.
+- Inicio simplificado: búsqueda, categorías y herramientas.
+- Las tarjetas completas son clicables; ya no requieren un botón «Abrir».
+- Registro maestro e Hipervinculador movidos al bloque de herramientas, al final de la navegación.
+- Botones permanentes de **Regresar** e **Inicio**.
+- Logotipo/nombre de Sethoria Atlas vuelve al Inicio al hacer clic.
+- Búsqueda global con paleta flotante.
+- Atajos:
+  - `Ctrl + K` o `/`: buscar.
+  - `N`: nuevo elemento.
+  - `Alt + ←`: regresar.
+  - `Esc`: cerrar búsqueda.
+- Zonas de clic más grandes.
+- Animaciones pequeñas y rápidas.
+- Barra lateral más compacta.
+- Interfaz responsive para pantallas más pequeñas.
+- Exportar/importar respaldo permanece disponible, pero menos invasivo.
+- No se han añadido todavía mapas, cronologías avanzadas ni gráficos de relaciones.
 
-Incluye:
+## Uso en GitHub Pages
 
-- 24 categorías acordadas.
-- Registro maestro de entidades.
-- ID interno + etiqueta maestra + título + alias + etiquetas secundarias.
-- Búsqueda global.
-- Creación de elementos desde la web.
-- Persistencia local mediante IndexedDB.
-- Exportación/importación de respaldo JSON.
-- Hipervinculador rápido de texto.
-- Resolución básica de ambigüedades.
-- Navegación a fichas internas.
-- Datos de demostración mínimos.
+No requiere Node, npm ni compilación.
 
-## Publicar en GitHub Pages
+Sube el contenido de esta carpeta al repositorio y publica la raíz mediante GitHub Pages.
 
-No necesita Node, npm, compilación ni programas externos.
+## Persistencia
 
-1. Sube **todo el contenido de esta carpeta** a un repositorio de GitHub.
-2. En el repositorio abre `Settings`.
-3. Entra a `Pages`.
-4. En `Build and deployment`, selecciona publicación desde la rama principal y carpeta raíz.
-5. Abre la URL de GitHub Pages que GitHub indique.
+Los datos creados en la interfaz siguen usando IndexedDB del navegador.  
+`Exportar respaldo` crea un JSON recuperable.
 
-## Importante
+## Nota de compatibilidad
 
-Los elementos que crees desde la interfaz se guardan en el navegador con IndexedDB.  
-El botón **Exportar respaldo** genera un archivo JSON con el estado local.  
-En esta fase el prototipo no escribe directamente archivos del repositorio de GitHub.
-
-## Datos de demostración
-
-La primera apertura crea cinco entidades de prueba:
-
-- Esteban
-- Eulalia
-- Bagdad
-- Batalla de Bagdad
-- Grupo principal
-
-Solo sirven para comprobar navegación e hipervínculos. Se pueden sustituir posteriormente.
-
-## Siguiente fase prevista
-
-Después de validar este prototipo:
-
-- relaciones reales entre entidades;
-- árbol genealógico básico;
-- visualización de pertenencia a grupos;
-- línea de tiempo A/B;
-- primer motor de mapa-imagen con capas y marcadores.
+Usa el mismo nombre de base IndexedDB que el Prototipo A para conservar los elementos locales creados durante las pruebas en el mismo navegador/origen, siempre que la URL/origen sea el mismo.
