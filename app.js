@@ -7,9 +7,11 @@
   let entities = [];
   let currentView = {type:"home"};
   let navHistory = [];
-  let paletteIndex = 0;
-  let paletteItems = [];
   let linkerState = [];
+  let topSearchIndex = 0;
+  let topSearchItems = [];
+  let homeSearchIndex = 0;
+  let homeSearchItems = [];
 
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
@@ -62,12 +64,8 @@
     .toLowerCase().trim()
     .replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"");
 
-  function uid(){
-    return "ent_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8);
-  }
-  function esc(s=""){
-    return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-  }
+  function uid(){ return "ent_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8); }
+  function esc(s=""){ return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
   function categoryName(id){ return categoryMap.get(id) || id; }
 
   function openDB(){
@@ -118,7 +116,6 @@
     }catch{return []}
   }
   function setLocalArray(key,v){ localStorage.setItem(key,JSON.stringify(v)); }
-
   function getFavorites(){ return getLocalArray("sethoria-a2-favorites"); }
   function isFavorite(id){ return getFavorites().includes(id); }
   function toggleFavorite(id){
@@ -133,9 +130,7 @@
     recent=[id,...recent].slice(0,12);
     setLocalArray("sethoria-a2-recent",recent);
   }
-  function resolveIds(ids){
-    return ids.map(id=>entities.find(e=>e.id===id)).filter(Boolean);
-  }
+  function resolveIds(ids){ return ids.map(id=>entities.find(e=>e.id===id)).filter(Boolean); }
 
   function toast(message){
     const el=$("#toast");
@@ -146,17 +141,38 @@
   }
 
   function setBreadcrumb(text){ $("#breadcrumb").textContent=text; }
-  function setSearchVisibility(home){
-    $("#topSearchBtn").classList.toggle("home-hidden",!!home);
+  function setTopSearchMode(mode, categoryId=null){
+    const wrap=$("#topSearchWrap");
+    const btn=$("#topSearchBtn");
+    const input=$("#topSearchInput");
+    if(mode==="hidden"){
+      wrap.classList.add("hidden");
+      btn.classList.add("hidden");
+      closeTopSearchResults();
+      return;
+    }
+    wrap.classList.remove("hidden");
+    btn.classList.remove("hidden");
+    if(mode==="global"){
+      input.placeholder="Buscar en todo Sethoria Atlas…";
+      input.dataset.scope="global";
+      input.dataset.category="";
+    }else if(mode==="category"){
+      input.placeholder=`Buscar en ${categoryName(categoryId)}…`;
+      input.dataset.scope="category";
+      input.dataset.category=categoryId||"";
+    }else{
+      input.placeholder="Buscar…";
+      input.dataset.scope="global";
+      input.dataset.category="";
+    }
   }
   function setActive(key){
     $$(".nav-button,.category-button").forEach(b=>b.classList.remove("active"));
     const el=document.querySelector(`[data-nav="${CSS.escape(key)}"]`);
     if(el) el.classList.add("active");
   }
-  function updateBack(){
-    $("#backBtn").disabled=navHistory.length===0;
-  }
+  function updateBack(){ $("#backBtn").disabled=navHistory.length===0; }
 
   function pushHistory(){
     const last=navHistory[navHistory.length-1];
@@ -204,19 +220,90 @@
       return;
     }
     const collapsed=app.classList.toggle("sidebar-collapsed");
-    localStorage.setItem("sethoria-a2-sidebar-collapsed",collapsed?"1":"0");
+    localStorage.setItem("sethoria-a3-sidebar-collapsed",collapsed?"1":"0");
   }
   function restoreSidebar(){
     if(window.matchMedia("(max-width:700px)").matches) return;
-    if(localStorage.getItem("sethoria-a2-sidebar-collapsed")==="1"){
+    if(localStorage.getItem("sethoria-a3-sidebar-collapsed")==="1"){
       $("#app").classList.add("sidebar-collapsed");
     }
   }
 
-  function formatToday(){
-    try{
-      return new Intl.DateTimeFormat("es-MX",{weekday:"long",day:"numeric",month:"long"}).format(new Date());
-    }catch{return ""}
+  function searchEntities(query,{scope="global",categoryId=null,limit=12}={}){
+    const term=(query||"").trim().toLocaleLowerCase("es");
+    let base=entities;
+    if(scope==="category" && categoryId) base=base.filter(e=>e.category===categoryId);
+
+    if(!term){
+      if(scope==="category" && categoryId) return base.slice(0,limit);
+      const recent=resolveIds(getLocalArray("sethoria-a2-recent")).slice(0,6);
+      const seen=new Set(recent.map(x=>x.id));
+      const rest=base.filter(e=>!seen.has(e.id)).slice(0,limit-recent.length);
+      return [...recent,...rest].slice(0,limit);
+    }
+    return base.filter(e=>{
+      const hay=[e.title,e.masterTag,...(e.aliases||[]),...(e.tags||[]),categoryName(e.category)].join(" ").toLocaleLowerCase("es");
+      return hay.includes(term);
+    }).slice(0,limit);
+  }
+
+  function renderSearchDropdown(container, items, activeIndex, clickHandler){
+    if(!items.length){
+      container.innerHTML=`<div class="search-empty">Sin resultados.</div>`;
+      container.classList.remove("hidden");
+      return;
+    }
+    container.innerHTML=items.map((e,i)=>`
+      <button class="search-item ${i===activeIndex?"active":""}" data-search-item="${e.id}">
+        <div><span>${esc(e.title)}</span><small>${esc(categoryName(e.category))}</small></div>
+        <small>${esc(e.masterTag||"")}</small>
+      </button>
+    `).join("");
+    container.classList.remove("hidden");
+    container.querySelectorAll("[data-search-item]").forEach(b=>b.onclick=()=>clickHandler(b.dataset.searchItem));
+  }
+  function closeTopSearchResults(){ $("#topSearchResults").classList.add("hidden"); }
+  function closeHomeSearchResults(){ $("#homeSearchResults")?.classList.add("hidden"); }
+
+  function bindTopSearch(){
+    const input=$("#topSearchInput"), results=$("#topSearchResults");
+    input.oninput=()=>{
+      topSearchIndex=0;
+      topSearchItems=searchEntities(input.value,{
+        scope:input.dataset.scope||"global",
+        categoryId:input.dataset.category||null,
+        limit:14
+      });
+      renderSearchDropdown(results, topSearchItems, topSearchIndex, id=>{
+        closeTopSearchResults();
+        showEntity(id,true);
+      });
+    };
+    input.onfocus=()=>input.oninput();
+    input.onkeydown=e=>{
+      if(results.classList.contains("hidden")) input.oninput();
+      if(e.key==="ArrowDown"){
+        e.preventDefault();
+        if(!topSearchItems.length) return;
+        topSearchIndex=(topSearchIndex+1)%topSearchItems.length;
+        renderSearchDropdown(results, topSearchItems, topSearchIndex, id=>{ closeTopSearchResults(); showEntity(id,true); });
+      }else if(e.key==="ArrowUp"){
+        e.preventDefault();
+        if(!topSearchItems.length) return;
+        topSearchIndex=(topSearchIndex-1+topSearchItems.length)%topSearchItems.length;
+        renderSearchDropdown(results, topSearchItems, topSearchIndex, id=>{ closeTopSearchResults(); showEntity(id,true); });
+      }else if(e.key==="Enter"){
+        if(topSearchItems[topSearchIndex]){
+          e.preventDefault();
+          const id=topSearchItems[topSearchIndex].id;
+          closeTopSearchResults();
+          showEntity(id,true);
+        }
+      }else if(e.key==="Escape"){
+        closeTopSearchResults();
+        input.blur();
+      }
+    };
   }
 
   function categoryCard(id){
@@ -231,7 +318,6 @@
       <small>${esc(descriptions[id]||"")}</small>
     </button>`;
   }
-
   function miniEntity(e){
     return `<button class="mini-entity" data-mini-entity="${e.id}">
       <strong>${esc(e.title)}</strong>
@@ -244,26 +330,49 @@
     currentView={type:"home"};
     setActive("");
     setBreadcrumb("Inicio");
-    setSearchVisibility(true);
+    setTopSearchMode("hidden");
 
     const recent=resolveIds(getLocalArray("sethoria-a2-recent")).slice(0,5);
     const favorites=resolveIds(getFavorites()).slice(0,5);
 
     $("#view").innerHTML=`
       <div class="home-shell">
-        <div class="home-head">
-          <div class="home-title-block">
-            <div class="eyebrow">Sethoria Atlas</div>
-            <h1>Inicio</h1>
-          </div>
-          <div class="home-date">${esc(formatToday())}</div>
-        </div>
+        <section class="hero-board">
+          <div class="hero-inner">
+            <div>
+              <div class="hero-head">
+                <div class="eyebrow">Sethoria Atlas</div>
+                <h1>Atlas de worldbuilding para Sethoria</h1>
+                <p>Una guía viva para personajes, arcos, criaturas, culturas, historia real, rutas y todos los hilos del proyecto. Pensado como una mesa de trabajo personal, no solo como una base de datos fría.</p>
+              </div>
 
-        <div class="home-search">
-          <span class="search-symbol">⌕</span>
-          <input id="homeSearch" type="search" placeholder="Buscar en todo Sethoria Atlas…" autocomplete="off" />
-          <kbd>Ctrl K</kbd>
-        </div>
+              <div class="home-search">
+                <span class="search-symbol">⌕</span>
+                <input id="homeSearch" type="search" placeholder="Buscar en todo Sethoria Atlas…" autocomplete="off" />
+                <kbd>Ctrl K</kbd>
+                <div id="homeSearchResults" class="search-dropdown home-search-results hidden"></div>
+              </div>
+            </div>
+
+            <aside class="hero-side">
+              <div class="hero-side-title">Accesos rápidos</div>
+              <div class="hero-links">
+                <button class="hero-link" id="heroCharacters">
+                  <strong>Personajes</strong>
+                  <small>Fichas, relaciones y evolución</small>
+                </button>
+                <button class="hero-link" id="heroArcs">
+                  <strong>Arcos y eventos</strong>
+                  <small>Tramas, batallas y líneas temporales</small>
+                </button>
+                <button class="hero-link" id="heroWorld">
+                  <strong>Mundo y criaturas</strong>
+                  <small>Lugares, culturas y bestiario</small>
+                </button>
+              </div>
+            </aside>
+          </div>
+        </section>
 
         <div class="dashboard-strip">
           <div class="continue-panel">
@@ -276,6 +385,15 @@
             <div class="strip-title"><strong>Favoritos</strong><span>Acceso rápido</span></div>
             <div class="favorite-list">
               ${favorites.length ? favorites.map(miniEntity).join("") : `<span class="empty-inline">Marca ☆ en una ficha para fijarla aquí.</span>`}
+            </div>
+          </div>
+          <div class="support-panel">
+            <div class="strip-title"><strong>Apoyo</strong><span>Espacio futuro</span></div>
+            <p>Si más adelante quieres añadir una sección para apoyo, donaciones o extras del proyecto, aquí ya queda un espacio coherente dentro del tono visual.</p>
+            <div class="support-buttons">
+              <span class="support-chip">Ko-fi</span>
+              <span class="support-chip">PayPal</span>
+              <span class="support-chip">Patreon</span>
             </div>
           </div>
         </div>
@@ -320,8 +438,44 @@
     $("#homeRegistry").onclick=()=>showRegistry(true);
     $("#homeLinker").onclick=()=>showLinker(true);
     $("#homeBackup").onclick=exportBackup;
-    $("#homeSearch").onfocus=()=>openPalette();
-    $("#homeSearch").oninput=e=>openPalette(e.target.value);
+    $("#heroCharacters").onclick=()=>showCategory("personajes",true);
+    $("#heroArcs").onclick=()=>showCategory("arcos",true);
+    $("#heroWorld").onclick=()=>showCategory("lugares",true);
+
+    const input=$("#homeSearch"), results=$("#homeSearchResults");
+    input.oninput=()=>{
+      homeSearchIndex=0;
+      homeSearchItems=searchEntities(input.value,{scope:"global",limit:14});
+      renderSearchDropdown(results, homeSearchItems, homeSearchIndex, id=>{
+        closeHomeSearchResults();
+        showEntity(id,true);
+      });
+    };
+    input.onfocus=()=>input.oninput();
+    input.onkeydown=e=>{
+      if(results.classList.contains("hidden")) input.oninput();
+      if(e.key==="ArrowDown"){
+        e.preventDefault();
+        if(!homeSearchItems.length) return;
+        homeSearchIndex=(homeSearchIndex+1)%homeSearchItems.length;
+        renderSearchDropdown(results, homeSearchItems, homeSearchIndex, id=>{ closeHomeSearchResults(); showEntity(id,true); });
+      }else if(e.key==="ArrowUp"){
+        e.preventDefault();
+        if(!homeSearchItems.length) return;
+        homeSearchIndex=(homeSearchIndex-1+homeSearchItems.length)%homeSearchItems.length;
+        renderSearchDropdown(results, homeSearchItems, homeSearchIndex, id=>{ closeHomeSearchResults(); showEntity(id,true); });
+      }else if(e.key==="Enter"){
+        if(homeSearchItems[homeSearchIndex]){
+          e.preventDefault();
+          const id=homeSearchItems[homeSearchIndex].id;
+          closeHomeSearchResults();
+          showEntity(id,true);
+        }
+      }else if(e.key==="Escape"){
+        closeHomeSearchResults();
+        input.blur();
+      }
+    };
     updateBack();
   }
 
@@ -330,9 +484,8 @@
     currentView={type:"category",id};
     setActive(id);
     setBreadcrumb(categoryName(id));
-    setSearchVisibility(false);
+    setTopSearchMode("category", id);
 
-    const list=entities.filter(e=>e.category===id);
     $("#view").innerHTML=`
       <div class="page-title">
         <div>
@@ -340,12 +493,28 @@
           <p>${esc(descriptions[id]||"")}</p>
         </div>
       </div>
-      ${list.length
-        ? `<div class="grid">${list.map(entityCard).join("")}</div>`
-        : `<div class="empty">Todavía no hay elementos en esta categoría. Usa “+ Nuevo” en la barra superior cuando quieras agregar uno.</div>`}
+      <div class="category-toolbar">
+        <div class="category-search">
+          <span class="icon">⌕</span>
+          <input id="categorySearchInput" type="search" placeholder="Buscar dentro de ${esc(categoryName(id))}…" autocomplete="off" />
+        </div>
+        <div class="category-count" id="categoryCount"></div>
+      </div>
+      <div id="categoryGridWrap"></div>
     `;
-    wireEntityCards();
+    renderCategoryGrid(id, "");
+    $("#categorySearchInput").oninput=e=>renderCategoryGrid(id, e.target.value);
     updateBack();
+  }
+
+  function renderCategoryGrid(categoryId, query){
+    const wrap=$("#categoryGridWrap");
+    const list=searchEntities(query,{scope:"category",categoryId,limit:9999});
+    $("#categoryCount").textContent=`${list.length} elemento${list.length===1?"":"s"}`;
+    wrap.innerHTML=list.length
+      ? `<div class="grid">${list.map(entityCard).join("")}</div>`
+      : `<div class="empty">No encontré elementos dentro de esta categoría.</div>`;
+    wireEntityCards();
   }
 
   function entityCard(e){
@@ -390,7 +559,7 @@
     currentView={type:"registry"};
     setActive("registry");
     setBreadcrumb("Registro maestro");
-    setSearchVisibility(false);
+    setTopSearchMode("global");
 
     const rows=entities.slice().sort((a,b)=>a.title.localeCompare(b.title,"es"));
     $("#view").innerHTML=`
@@ -469,7 +638,7 @@
     currentView={type:"linker"};
     setActive("linker");
     setBreadcrumb("Hipervinculador rápido");
-    setSearchVisibility(false);
+    setTopSearchMode("global");
 
     $("#view").innerHTML=`
       <div class="page-title">
@@ -522,10 +691,7 @@
     list.innerHTML=linkerState.map((m,i)=>{
       const unique=[], seen=new Set();
       for(const c of m.candidates){
-        if(!seen.has(c.entity.id)){
-          seen.add(c.entity.id);
-          unique.push(c);
-        }
+        if(!seen.has(c.entity.id)){ seen.add(c.entity.id); unique.push(c); }
       }
       m.candidates=unique;
       return `<div class="detected-item ${unique.length>1?"ambiguous":""}">
@@ -542,14 +708,8 @@
       </div>`;
     }).join("");
 
-    $$("[data-enable]").forEach(el=>el.onchange=()=>{
-      linkerState[+el.dataset.enable].enabled=el.checked;
-      renderLinkedPreview(text);
-    });
-    $$("[data-select]").forEach(el=>el.onchange=()=>{
-      linkerState[+el.dataset.select].selected=+el.value;
-      renderLinkedPreview(text);
-    });
+    $$("[data-enable]").forEach(el=>el.onchange=()=>{ linkerState[+el.dataset.enable].enabled=el.checked; renderLinkedPreview(text); });
+    $$("[data-select]").forEach(el=>el.onchange=()=>{ linkerState[+el.dataset.select].selected=+el.value; renderLinkedPreview(text); });
     renderLinkedPreview(text);
   }
 
@@ -564,9 +724,7 @@
       if(m.enabled && m.candidates.length){
         const c=m.candidates[m.selected] || m.candidates[0];
         out += `<a href="#entity=${encodeURIComponent(c.entity.id)}" data-entity-link="${c.entity.id}">${esc(text.slice(m.start,m.end))}</a>`;
-      } else {
-        out += esc(text.slice(m.start,m.end));
-      }
+      } else out += esc(text.slice(m.start,m.end));
       pos=m.end;
     }
     out += esc(text.slice(pos));
@@ -586,7 +744,7 @@
     addRecent(id);
     $$(".nav-button,.category-button").forEach(b=>b.classList.remove("active"));
     setBreadcrumb(`${categoryName(e.category)} / ${e.title}`);
-    setSearchVisibility(false);
+    setTopSearchMode("global");
 
     const fav=isFavorite(id);
     $("#view").innerHTML=`
@@ -598,7 +756,7 @@
             ${e.masterTag?`<span class="badge master">${esc(e.masterTag)}</span>`:""}
             ${(e.tags||[]).map(t=>`<span class="badge">#${esc(t)}</span>`).join("")}
           </div>
-          <p style="line-height:1.6;color:#7f8da0;font-size:11px;max-width:850px">${esc(e.summary||"Sin resumen.")}</p>
+          <p style="line-height:1.6;color:#f0debf;font-size:11px;max-width:850px">${esc(e.summary||"Sin resumen.")}</p>
           <div class="entity-tabs">
             <button>Resumen</button>
             <button>Relaciones</button>
@@ -683,58 +841,6 @@
     return true;
   }
 
-  function searchEntities(q){
-    const term=q.trim().toLocaleLowerCase("es");
-    if(!term){
-      const recent=resolveIds(getLocalArray("sethoria-a2-recent")).slice(0,6);
-      const rest=entities.filter(e=>!recent.some(r=>r.id===e.id)).slice(0,6);
-      return [...recent,...rest];
-    }
-    return entities.filter(e=>{
-      const hay=[
-        e.title,
-        e.masterTag,
-        ...(e.aliases||[]),
-        ...(e.tags||[]),
-        categoryName(e.category)
-      ].join(" ").toLocaleLowerCase("es");
-      return hay.includes(term);
-    }).slice(0,20);
-  }
-
-  function openPalette(prefill=""){
-    $("#commandPalette").classList.remove("hidden");
-    $("#commandPalette").setAttribute("aria-hidden","false");
-    $("#paletteSearch").value=prefill || "";
-    paletteIndex=0;
-    renderPalette(prefill || "");
-    setTimeout(()=>$("#paletteSearch").focus(),0);
-  }
-  function closePalette(){
-    $("#commandPalette").classList.add("hidden");
-    $("#commandPalette").setAttribute("aria-hidden","true");
-  }
-  function renderPalette(q){
-    paletteItems=searchEntities(q);
-    $("#paletteResults").innerHTML=paletteItems.length
-      ? paletteItems.map((e,i)=>`<button class="palette-item ${i===paletteIndex?"selected":""}" data-palette-id="${e.id}" data-palette-index="${i}">
-          <span>${esc(e.title)}</span><small>${esc(categoryName(e.category))}</small>
-        </button>`).join("")
-      : `<div class="empty">Sin resultados.</div>`;
-
-    $$("[data-palette-id]").forEach(b=>b.onclick=()=>{
-      closePalette();
-      showEntity(b.dataset.paletteId,true);
-    });
-  }
-  function paletteMove(delta){
-    if(!paletteItems.length) return;
-    paletteIndex=(paletteIndex+delta+paletteItems.length)%paletteItems.length;
-    renderPalette($("#paletteSearch").value);
-    const el=document.querySelector(`[data-palette-index="${paletteIndex}"]`);
-    el?.scrollIntoView({block:"nearest"});
-  }
-
   async function copyText(text){
     await navigator.clipboard.writeText(text);
     toast("Copiado al portapapeles");
@@ -742,14 +848,11 @@
 
   async function exportBackup(){
     const payload={
-      format:"sethoria-atlas-prototipo-a2",
-      version:3,
+      format:"sethoria-atlas-prototipo-a3",
+      version:4,
       exportedAt:new Date().toISOString(),
       entities,
-      ui:{
-        favorites:getFavorites(),
-        recent:getLocalArray("sethoria-a2-recent")
-      }
+      ui:{ favorites:getFavorites(), recent:getLocalArray("sethoria-a2-recent") }
     };
     const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
     const a=document.createElement("a");
@@ -763,16 +866,21 @@
   async function importBackup(file){
     const payload=JSON.parse(await file.text());
     if(!payload || !Array.isArray(payload.entities)) throw new Error("Archivo no válido");
-
     await clearEntities();
     for(const e of payload.entities) await putEntity(e);
     entities=await getAll();
-
     if(payload.ui?.favorites) setLocalArray("sethoria-a2-favorites",payload.ui.favorites);
     if(payload.ui?.recent) setLocalArray("sethoria-a2-recent",payload.ui.recent);
-
     toast("Respaldo importado");
     showHome(true);
+  }
+
+  function bindDialog(dialog){
+    dialog.addEventListener("click", e=>{
+      const rect = dialog.getBoundingClientRect();
+      const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+      if(!inside) dialog.close();
+    });
   }
 
   async function init(){
@@ -787,11 +895,18 @@
     $("#registryBtn").onclick=()=>showRegistry(true);
     $("#linkerBtn").onclick=()=>showLinker(true);
     $("#newEntityBtn").onclick=()=>openDialog();
-    $("#topSearchBtn").onclick=()=>openPalette();
+    $("#topSearchBtn").onclick=()=>{
+      const input=$("#topSearchInput");
+      if($("#topSearchWrap").classList.contains("hidden")) setTopSearchMode("global");
+      input.focus(); input.select(); input.dispatchEvent(new Event("input"));
+    };
     $("#shortcutsBtn").onclick=()=>$("#shortcutsDialog").showModal();
-
     $("#closeDialogBtn").onclick=()=>$("#entityDialog").close();
     $("#cancelDialogBtn").onclick=()=>$("#entityDialog").close();
+
+    bindTopSearch();
+    bindDialog($("#entityDialog"));
+    bindDialog($("#shortcutsDialog"));
 
     $("#entityTitle").addEventListener("input",()=>{
       if(!$("#entityMasterTag").dataset.touched){
@@ -818,42 +933,32 @@
       e.target.value="";
     };
 
-    $("#commandPalette").onclick=e=>{
-      if(e.target===$("#commandPalette")) closePalette();
-    };
-    $("#paletteSearch").oninput=e=>{
-      paletteIndex=0;
-      renderPalette(e.target.value);
-    };
-    $("#paletteSearch").onkeydown=e=>{
-      if(e.key==="ArrowDown"){
-        e.preventDefault();paletteMove(1);
-      }else if(e.key==="ArrowUp"){
-        e.preventDefault();paletteMove(-1);
-      }else if(e.key==="Enter" && paletteItems[paletteIndex]){
-        e.preventDefault();
-        const id=paletteItems[paletteIndex].id;
-        closePalette();
-        showEntity(id,true);
-      }else if(e.key==="Escape"){
-        closePalette();
+    document.addEventListener("click",e=>{
+      if(!e.target.closest("#topSearchWrap")) closeTopSearchResults();
+      if(!e.target.closest(".home-search")) closeHomeSearchResults();
+      if(window.matchMedia("(max-width:700px)").matches && !e.target.closest(".sidebar") && !e.target.closest("#sidebarToggle")){
+        $("#app").classList.remove("mobile-sidebar-open");
       }
-    };
+    });
 
     document.addEventListener("keydown",e=>{
       const tag=(document.activeElement?.tagName||"").toLowerCase();
       const typing=["input","textarea","select"].includes(tag);
 
       if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="k"){
-        e.preventDefault();openPalette();
+        e.preventDefault();
+        if(currentView.type==="home") $("#homeSearch")?.focus();
+        else { $("#topSearchInput").focus(); $("#topSearchInput").select(); $("#topSearchInput").dispatchEvent(new Event("input")); }
       }else if(!typing && e.key==="/"){
-        e.preventDefault();openPalette();
+        e.preventDefault();
+        if(currentView.type==="home") $("#homeSearch")?.focus();
+        else { $("#topSearchInput").focus(); $("#topSearchInput").select(); $("#topSearchInput").dispatchEvent(new Event("input")); }
       }else if(!typing && e.key.toLowerCase()==="n"){
-        e.preventDefault();openDialog();
+        e.preventDefault(); openDialog();
       }else if(e.altKey && e.key==="ArrowLeft"){
-        e.preventDefault();goBack();
+        e.preventDefault(); goBack();
       }else if(e.key==="Escape"){
-        if(!$("#commandPalette").classList.contains("hidden")) closePalette();
+        closeTopSearchResults(); closeHomeSearchResults();
         if($("#app").classList.contains("mobile-sidebar-open")) $("#app").classList.remove("mobile-sidebar-open");
       }
     });
@@ -865,11 +970,8 @@
     });
 
     const hash=location.hash;
-    if(hash.startsWith("#entity=")){
-      showEntity(decodeURIComponent(hash.slice(8)),false);
-    }else{
-      showHome(false);
-    }
+    if(hash.startsWith("#entity=")) showEntity(decodeURIComponent(hash.slice(8)),false);
+    else showHome(false);
     updateBack();
   }
 

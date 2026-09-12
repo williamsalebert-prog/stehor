@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#090d12" />
-  <title>Sethoria Atlas — Prototipo A.2</title>
+  <meta name="theme-color" content="#120e0b" />
+  <title>Sethoria Atlas — Prototipo A.3</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -14,7 +14,7 @@
         <div class="brand-mark" aria-hidden="true">S</div>
         <div class="brand-copy">
           <strong>Sethoria Atlas</strong>
-          <small>Atlas personal</small>
+          <small>Worldbuilding · aventuras · historia · mitología</small>
         </div>
       </button>
 
@@ -53,6 +53,14 @@
           <div id="breadcrumb" class="breadcrumb">Inicio</div>
         </div>
 
+        <div class="topbar-center">
+          <div id="topSearchWrap" class="inline-search hidden">
+            <span class="inline-search-icon">⌕</span>
+            <input id="topSearchInput" type="search" placeholder="Buscar…" autocomplete="off" />
+            <div id="topSearchResults" class="search-dropdown hidden"></div>
+          </div>
+        </div>
+
         <div class="topbar-right">
           <button id="topSearchBtn" class="round-button search-round" title="Buscar (Ctrl+K)" aria-label="Buscar">⌕</button>
           <button id="newEntityBtn" class="primary-button" title="Nuevo elemento (N)">＋ Nuevo</button>
@@ -61,18 +69,6 @@
 
       <section id="view"></section>
     </main>
-  </div>
-
-  <div id="commandPalette" class="palette-backdrop hidden" aria-hidden="true">
-    <div class="palette" role="dialog" aria-label="Buscar en Sethoria Atlas">
-      <div class="palette-input-wrap">
-        <span class="palette-search-icon">⌕</span>
-        <input id="paletteSearch" type="search" placeholder="Buscar personajes, lugares, eventos…" autocomplete="off" />
-        <kbd>Esc</kbd>
-      </div>
-      <div id="paletteResults" class="palette-results"></div>
-      <div class="palette-hint">↑ ↓ navegar · Enter abrir · Esc cerrar</div>
-    </div>
   </div>
 
   <dialog id="shortcutsDialog">
@@ -89,7 +85,7 @@
         <div><span><kbd>/</kbd></span><span>Buscar</span></div>
         <div><span><kbd>N</kbd></span><span>Nuevo elemento</span></div>
         <div><span><kbd>Alt</kbd> + <kbd>←</kbd></span><span>Regresar</span></div>
-        <div><span><kbd>Esc</kbd></span><span>Cerrar panel</span></div>
+        <div><span><kbd>Esc</kbd></span><span>Cerrar cuadro o búsqueda</span></div>
       </div>
     </div>
   </dialog>
@@ -127,7 +123,7 @@
         </label>
         <label class="full">
           Resumen / nota base
-          <textarea id="entitySummary" rows="5" placeholder="Información breve del elemento…"></textarea>
+          <textarea id="entitySummary" rows="6" placeholder="Información breve del elemento…"></textarea>
         </label>
       </div>
 

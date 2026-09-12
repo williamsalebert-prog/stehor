@@ -1,60 +1,38 @@
-# Sethoria Atlas — Prototipo A.2
+# Sethoria Atlas — Prototipo A.3
 
-Segunda pasada de interfaz. Esta versión conserva el núcleo del Prototipo A/A.1 y se concentra en navegación, densidad visual y comodidad de uso.
+Tercera pasada del prototipo, centrada en **estilo temático** y en corregir problemas concretos de interacción.
 
-## Cambios de A.2
+## Cambios principales de A.3
 
-- Se eliminó **Inicio** de la barra lateral: hacer clic en el logotipo vuelve al inicio.
-- Barra lateral **ocultable/colapsable** desde `☰`.
-- El estado colapsado se recuerda en el navegador.
-- Solo existe **un botón principal `+ Nuevo`**, en la barra superior.
-- Se eliminó el segundo `+ Nuevo` de las categorías.
-- La búsqueda grande vive en **Inicio**.
-- Fuera de Inicio queda un botón compacto de búsqueda global.
-- `Ctrl + K` y `/` abren la búsqueda desde cualquier lugar.
-- Pantalla de Inicio rehecha:
-  - buscador,
-  - recientes,
-  - favoritos,
-  - categorías agrupadas y compactas,
-  - herramientas al final.
-- Tarjetas de categorías mucho más compactas.
-- Tarjetas de entidades completamente clicables.
-- Favoritos con `☆ / ★`.
-- Se añadió “Continuar” con elementos recientes.
-- Barra superior más compacta.
-- Botón de regresar con historial interno.
-- Herramientas técnicas al final de la navegación.
-- Interfaz oscura refinada con textura muy sutil, iluminación ambiental y bordes menos bruscos.
-- Microanimaciones más pequeñas y uniformes.
-- Zonas de clic más grandes.
-- Diseño responsive mejorado.
-- Exportar/importar respaldo conserva también favoritos y recientes.
+### Estilo
+- La interfaz abandona el tono azul genérico y pasa a una paleta más **cálida / café / vino / dorado**, más acorde con un worldbuilding de aventuras, historia y mitología.
+- Inicio rehecho con un aire más temático.
+- Tarjetas de categorías y elementos ahora tienen un lenguaje visual más decorativo y más cercano a una “enciclopedia de aventuras”.
 
-## Datos y compatibilidad
+### Búsqueda
+- Se eliminó la búsqueda modal.
+- La búsqueda del **Inicio** busca en **todo Sethoria Atlas**.
+- La búsqueda de cada **categoría** busca **solo dentro de esa categoría**.
+- La barra superior mantiene una búsqueda inline para páginas internas.
 
-A.2 sigue usando la misma base IndexedDB del prototipo anterior:
+### Modales
+- Clic fuera del modal lo cierra.
+- El scroll largo se queda dentro del modal (`overflow` contenido + `overscroll-behavior: contain`).
 
-`sethoria-atlas-prototipo-a`
+### Inicio
+- Hero principal más trabajado.
+- Paneles de recientes, favoritos y un espacio futuro de apoyo/donaciones.
+- Accesos rápidos más claros.
 
-Por eso, si publicas A.2 en el mismo origen/URL de GitHub Pages, los elementos locales anteriores deberían seguir disponibles en ese navegador.
+### Otras notas
+- Se conserva la base de datos IndexedDB del prototipo anterior.
+- Siguen pendientes, a propósito:
+  - mapas reales,
+  - cronologías visuales,
+  - árbol genealógico,
+  - relaciones gráficas,
+  - vistas especializadas complejas.
 
 ## Publicación
-
-No requiere Node, npm ni compilación.
-
-Sube los archivos de esta carpeta a la raíz del repositorio que publica GitHub Pages.
-
-## Lo que todavía NO incluye
-
-A propósito todavía no entran:
-
-- mapas interactivos,
-- líneas de tiempo reales,
-- árbol genealógico,
-- redes de grupos,
-- relaciones visuales,
-- vistas especializadas de criaturas,
-- módulo técnico de barcos/batallas.
-
-La idea es validar primero que la interfaz base ya sea cómoda antes de cargar esos módulos encima.
+No requiere Node ni compilación.  
+Sube los archivos de esta carpeta al repositorio de GitHub Pages.
