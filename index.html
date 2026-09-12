@@ -4,135 +4,53 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#120e0b" />
-  <title>Sethoria Atlas — Prototipo A.3</title>
+  <title>Sethoria Atlas — Prototipo A3.3</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
     <aside id="sidebar" class="sidebar" aria-label="Navegación principal">
-      <button id="brandHome" class="brand" title="Ir al inicio" aria-label="Ir al inicio">
-        <div class="brand-mark" aria-hidden="true">S</div>
-        <div class="brand-copy">
-          <strong>Sethoria Atlas</strong>
-          <small>Worldbuilding · aventuras · historia · mitología</small>
-        </div>
-      </button>
 
-      <div id="categoryNav" class="category-nav"></div>
+      <!-- Inicio y control de tamaño forman una sola pieza visual.
+           El control está debajo de la S, no en una barra superior. -->
+      <div class="home-control">
+        <button id="brandHome" class="home-button" title="Inicio" aria-label="Ir al inicio">
+          <span class="brand-mark" aria-hidden="true">S</span>
+          <span class="home-copy">
+            <strong>Inicio</strong>
+            <small>Sethoria Atlas</small>
+          </span>
+        </button>
+        <button id="sidebarResizeBtn" class="resize-under-s" title="Expandir o contraer menú lateral" aria-label="Expandir o contraer menú lateral">
+          <span aria-hidden="true">⇔</span>
+        </button>
+      </div>
+
+      <nav id="categoryNav" class="category-nav" aria-label="Categorías"></nav>
 
       <div class="sidebar-tools">
         <div class="sidebar-title">Herramientas</div>
         <button id="registryBtn" class="nav-button" data-nav="registry" title="Registro maestro">
           <span class="nav-icon">⌗</span><span class="nav-label">Registro maestro</span>
         </button>
-        <button id="linkerBtn" class="nav-button" data-nav="linker" title="Hipervinculador rápido">
+        <button id="linkerBtn" class="nav-button" data-nav="linker" title="Hipervinculador">
           <span class="nav-icon">↗</span><span class="nav-label">Hipervinculador</span>
         </button>
       </div>
 
       <div class="sidebar-footer">
-        <div class="footer-row">
-          <button id="exportBtn" class="icon-action" title="Exportar respaldo">⇩</button>
-          <label class="icon-action file-label" title="Importar respaldo">
-            ⇧
-            <input id="importInput" type="file" accept=".json,application/json" hidden />
-          </label>
-          <button id="shortcutsBtn" class="icon-action" title="Atajos de teclado">⌨</button>
-        </div>
-        <div id="storageStatus" class="storage-status">
-          <span class="status-dot"></span><span class="storage-text">Datos locales activos</span>
-        </div>
+        <button id="exportBtn" class="icon-action" title="Exportar respaldo" aria-label="Exportar respaldo">⇩</button>
+        <label class="icon-action file-label" title="Importar respaldo" aria-label="Importar respaldo">
+          ⇧
+          <input id="importInput" type="file" accept=".json,application/json" hidden />
+        </label>
       </div>
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div class="topbar-left">
-          <button id="sidebarToggle" class="round-button" title="Ocultar/mostrar barra lateral" aria-label="Ocultar o mostrar barra lateral">☰</button>
-          <button id="backBtn" class="round-button" title="Regresar (Alt+←)" aria-label="Regresar">←</button>
-          <div id="breadcrumb" class="breadcrumb">Inicio</div>
-        </div>
-
-        <div class="topbar-center">
-          <div id="topSearchWrap" class="inline-search hidden">
-            <span class="inline-search-icon">⌕</span>
-            <input id="topSearchInput" type="search" placeholder="Buscar…" autocomplete="off" />
-            <div id="topSearchResults" class="search-dropdown hidden"></div>
-          </div>
-        </div>
-
-        <div class="topbar-right">
-          <button id="topSearchBtn" class="round-button search-round" title="Buscar (Ctrl+K)" aria-label="Buscar">⌕</button>
-          <button id="newEntityBtn" class="primary-button" title="Nuevo elemento (N)">＋ Nuevo</button>
-        </div>
-      </header>
-
       <section id="view"></section>
     </main>
   </div>
-
-  <dialog id="shortcutsDialog">
-    <div class="dialog-card shortcuts-card">
-      <div class="dialog-header">
-        <div>
-          <small>ATAJOS</small>
-          <h2>Teclado</h2>
-        </div>
-        <button type="button" class="icon-button" onclick="document.querySelector('#shortcutsDialog').close()">×</button>
-      </div>
-      <div class="shortcut-grid">
-        <div><span><kbd>Ctrl</kbd> + <kbd>K</kbd></span><span>Buscar</span></div>
-        <div><span><kbd>/</kbd></span><span>Buscar</span></div>
-        <div><span><kbd>N</kbd></span><span>Nuevo elemento</span></div>
-        <div><span><kbd>Alt</kbd> + <kbd>←</kbd></span><span>Regresar</span></div>
-        <div><span><kbd>Esc</kbd></span><span>Cerrar cuadro o búsqueda</span></div>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="entityDialog">
-    <form id="entityForm" method="dialog" class="dialog-card">
-      <div class="dialog-header">
-        <div>
-          <small>NUEVO ELEMENTO</small>
-          <h2>Registrar entidad</h2>
-        </div>
-        <button type="button" id="closeDialogBtn" class="icon-button" aria-label="Cerrar">×</button>
-      </div>
-
-      <div class="form-grid">
-        <label>
-          Título
-          <input id="entityTitle" required placeholder="Ej. Esteban" />
-        </label>
-        <label>
-          Categoría
-          <select id="entityCategory" required></select>
-        </label>
-        <label>
-          Etiqueta maestra
-          <input id="entityMasterTag" placeholder="Ej. personaje_esteban" />
-        </label>
-        <label>
-          Alias
-          <input id="entityAliases" placeholder="Separados por comas" />
-        </label>
-        <label class="full">
-          Etiquetas secundarias
-          <input id="entityTags" placeholder="Ej. libro-1, grupo-principal, México" />
-        </label>
-        <label class="full">
-          Resumen / nota base
-          <textarea id="entitySummary" rows="6" placeholder="Información breve del elemento…"></textarea>
-        </label>
-      </div>
-
-      <div class="dialog-actions">
-        <button type="button" id="cancelDialogBtn" class="secondary-button">Cancelar</button>
-        <button type="submit" class="primary-button">Guardar localmente</button>
-      </div>
-    </form>
-  </dialog>
 
   <div id="toast" class="toast hidden" role="status"></div>
 

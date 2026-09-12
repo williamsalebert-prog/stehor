@@ -1,38 +1,19 @@
-# Sethoria Atlas — Prototipo A.3
+# Sethoria Atlas — Prototipo A3.3
 
-Tercera pasada del prototipo, centrada en **estilo temático** y en corregir problemas concretos de interacción.
+Pasada de simplificación y consistencia visual.
 
-## Cambios principales de A.3
+Cambios principales:
+- Se eliminó por completo la barra superior.
+- El control para expandir/contraer el menú lateral está ahora debajo de la **S**, integrado visualmente en el bloque de **Inicio**.
+- Inicio: solo **Sethoria Atlas + tarjetas**.
+- Menús de categorías: tarjetas compactas con **imagen (si existe) + título**. Si no hay imagen, usan el icono como marcador provisional.
+- Se eliminaron descripciones, contadores y controles innecesarios de los menús.
+- Favoritos y “continuar” no aparecen.
+- Las fichas muestran el contenido principal y dejan los datos técnicos dentro de un desplegable **Identificación**.
+- Registro maestro e Hipervinculador siguen disponibles como herramientas laterales.
+- Se conserva la misma IndexedDB de prototipos anteriores.
 
-### Estilo
-- La interfaz abandona el tono azul genérico y pasa a una paleta más **cálida / café / vino / dorado**, más acorde con un worldbuilding de aventuras, historia y mitología.
-- Inicio rehecho con un aire más temático.
-- Tarjetas de categorías y elementos ahora tienen un lenguaje visual más decorativo y más cercano a una “enciclopedia de aventuras”.
+Campos opcionales de imagen admitidos por las tarjetas:
+`image`, `imageUrl`, `thumbnail` o `cover`.
 
-### Búsqueda
-- Se eliminó la búsqueda modal.
-- La búsqueda del **Inicio** busca en **todo Sethoria Atlas**.
-- La búsqueda de cada **categoría** busca **solo dentro de esa categoría**.
-- La barra superior mantiene una búsqueda inline para páginas internas.
-
-### Modales
-- Clic fuera del modal lo cierra.
-- El scroll largo se queda dentro del modal (`overflow` contenido + `overscroll-behavior: contain`).
-
-### Inicio
-- Hero principal más trabajado.
-- Paneles de recientes, favoritos y un espacio futuro de apoyo/donaciones.
-- Accesos rápidos más claros.
-
-### Otras notas
-- Se conserva la base de datos IndexedDB del prototipo anterior.
-- Siguen pendientes, a propósito:
-  - mapas reales,
-  - cronologías visuales,
-  - árbol genealógico,
-  - relaciones gráficas,
-  - vistas especializadas complejas.
-
-## Publicación
-No requiere Node ni compilación.  
-Sube los archivos de esta carpeta al repositorio de GitHub Pages.
+No requiere compilación. Puede publicarse directamente en GitHub Pages.
