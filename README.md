@@ -1,19 +1,62 @@
-# Sethoria Atlas — Prototipo A3.3
+# Sethoria Atlas — Prototipo A4
 
-Pasada de simplificación y consistencia visual.
+Reestructuración visual y de navegación del núcleo de Sethoria Atlas.
 
-Cambios principales:
-- Se eliminó por completo la barra superior.
-- El control para expandir/contraer el menú lateral está ahora debajo de la **S**, integrado visualmente en el bloque de **Inicio**.
-- Inicio: solo **Sethoria Atlas + tarjetas**.
-- Menús de categorías: tarjetas compactas con **imagen (si existe) + título**. Si no hay imagen, usan el icono como marcador provisional.
-- Se eliminaron descripciones, contadores y controles innecesarios de los menús.
-- Favoritos y “continuar” no aparecen.
-- Las fichas muestran el contenido principal y dejan los datos técnicos dentro de un desplegable **Identificación**.
-- Registro maestro e Hipervinculador siguen disponibles como herramientas laterales.
-- Se conserva la misma IndexedDB de prototipos anteriores.
+## Filosofía
+La interfaz evita convertir el proyecto en un dashboard administrativo. La portada y los menús de categorías funcionan como un atlas visual: **símbolo o imagen + título + clic**. Los datos técnicos existen, pero no compiten con la navegación.
 
-Campos opcionales de imagen admitidos por las tarjetas:
-`image`, `imageUrl`, `thumbnail` o `cover`.
+## Cambios de A4
+- Eliminada cualquier barra superior.
+- **Inicio y control de tamaño del lateral forman una sola pieza**:
+  - la S funciona como parte del botón Inicio;
+  - el control `⇔` está justo debajo de la S, dentro del mismo bloque.
+- Portada reducida a:
+  - título `Sethoria Atlas`;
+  - tarjetas de categorías.
+- Sistema nuevo de iconos SVG de línea, consistente para todas las categorías.
+- Animaciones más cuidadas:
+  - entrada escalonada de tarjetas;
+  - brillo en hover;
+  - movimiento sutil de iconos;
+  - transición del menú lateral.
+- Mayor aprovechamiento del espacio:
+  - cuadrícula responsive con más columnas;
+  - tarjetas compactas;
+  - menos márgenes muertos.
+- Menús de categorías:
+  - solo **imagen/símbolo + título**;
+  - sin descripciones;
+  - sin contadores;
+  - sin etiquetas técnicas;
+  - sin botones redundantes.
+- Las tarjetas admiten imagen automáticamente mediante:
+  - `image`
+  - `imageUrl`
+  - `thumbnail`
+  - `cover`
+- Fichas:
+  - título y resumen visibles;
+  - datos de ID/alias/etiquetas ocultos en `Identificación técnica`.
+- Registro maestro e Hipervinculador permanecen separados como herramientas.
+- Exportar/importar sigue disponible en la parte baja del lateral.
+- Misma IndexedDB que las versiones anteriores para no romper los datos locales existentes.
 
-No requiere compilación. Puede publicarse directamente en GitHub Pages.
+## Referencias de diseño estudiadas
+La reestructuración toma ideas generales de:
+- Dark-Fall / World Anvil: portada como navegación temática por categorías.
+- Star Wars Databank: selección visual de entidades con imagen y nombre.
+- Tolkien Gateway / Memory Alpha: jerarquías de categorías claras para grandes cantidades de información.
+- Harry Potter Lexicon: separación entre navegación general, cronologías y fichas especializadas.
+- SCP Wiki: diferentes tipos de información no necesitan compartir una plantilla idéntica.
+- World Anvil: categorías como unidades estructurales del proyecto.
+
+## Publicación
+No requiere Node, npm ni compilación.
+
+Sube:
+- `index.html`
+- `styles.css`
+- `app.js`
+- carpeta `data/`
+
+a la raíz que publica GitHub Pages.

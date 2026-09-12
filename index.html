@@ -3,45 +3,49 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#120e0b" />
-  <title>Sethoria Atlas — Prototipo A3.3</title>
+  <meta name="theme-color" content="#120d0a" />
+  <title>Sethoria Atlas — Prototipo A4</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
-    <aside id="sidebar" class="sidebar" aria-label="Navegación principal">
+    <aside id="sidebar" class="sidebar" aria-label="Navegación de Sethoria Atlas">
 
-      <!-- Inicio y control de tamaño forman una sola pieza visual.
-           El control está debajo de la S, no en una barra superior. -->
-      <div class="home-control">
-        <button id="brandHome" class="home-button" title="Inicio" aria-label="Ir al inicio">
-          <span class="brand-mark" aria-hidden="true">S</span>
+      <div class="home-cluster">
+        <button id="brandHome" class="home-main" aria-label="Ir al inicio" title="Inicio">
+          <span class="brand-s">S</span>
           <span class="home-copy">
-            <strong>Inicio</strong>
-            <small>Sethoria Atlas</small>
+            <strong>Sethoria Atlas</strong>
+            <small>Inicio</small>
           </span>
         </button>
-        <button id="sidebarResizeBtn" class="resize-under-s" title="Expandir o contraer menú lateral" aria-label="Expandir o contraer menú lateral">
-          <span aria-hidden="true">⇔</span>
+        <button id="sidebarResizeBtn" class="home-resize" aria-label="Expandir o contraer menú" title="Expandir o contraer menú">
+          <span class="resize-glyph">⇔</span>
         </button>
       </div>
 
       <nav id="categoryNav" class="category-nav" aria-label="Categorías"></nav>
 
       <div class="sidebar-tools">
-        <div class="sidebar-title">Herramientas</div>
-        <button id="registryBtn" class="nav-button" data-nav="registry" title="Registro maestro">
-          <span class="nav-icon">⌗</span><span class="nav-label">Registro maestro</span>
+        <div class="sidebar-label">Herramientas</div>
+        <button id="registryBtn" class="nav-item" data-nav="registry" title="Registro maestro">
+          <span class="nav-svg" data-icon="registry"></span>
+          <span class="nav-text">Registro maestro</span>
         </button>
-        <button id="linkerBtn" class="nav-button" data-nav="linker" title="Hipervinculador">
-          <span class="nav-icon">↗</span><span class="nav-label">Hipervinculador</span>
+        <button id="linkerBtn" class="nav-item" data-nav="linker" title="Hipervinculador">
+          <span class="nav-svg" data-icon="link"></span>
+          <span class="nav-text">Hipervinculador</span>
         </button>
       </div>
 
       <div class="sidebar-footer">
-        <button id="exportBtn" class="icon-action" title="Exportar respaldo" aria-label="Exportar respaldo">⇩</button>
-        <label class="icon-action file-label" title="Importar respaldo" aria-label="Importar respaldo">
-          ⇧
+        <button id="exportBtn" class="footer-action" title="Exportar respaldo" aria-label="Exportar respaldo">
+          <span class="nav-svg" data-icon="download"></span>
+          <span class="footer-text">Exportar</span>
+        </button>
+        <label class="footer-action file-label" title="Importar respaldo">
+          <span class="nav-svg" data-icon="upload"></span>
+          <span class="footer-text">Importar</span>
           <input id="importInput" type="file" accept=".json,application/json" hidden />
         </label>
       </div>
