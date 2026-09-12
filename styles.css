@@ -485,3 +485,393 @@ textarea.big{
   .entity-tabs{padding:5px}
   .entity-tab{padding:7px 8px}
 }
+
+
+/* ============================================================
+   PERSONAJES — TANDA 0
+   Wiki estática + estructura limpia y modular.
+   ============================================================ */
+
+.character-page{max-width:1210px}
+.character-titlebar{
+  margin-bottom:11px;
+  padding:2px 2px 8px;
+  border-bottom:1px solid rgba(110,75,48,.44)
+}
+.character-title-copy h1{
+  margin:3px 0 0;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:32px;line-height:1.05;
+  font-weight:700
+}
+.character-subtitle{
+  margin-top:5px;color:#a98c69;font-size:10.5px
+}
+
+.character-wiki-layout{
+  display:grid;
+  grid-template-columns:248px minmax(0,1fr);
+  align-items:start;
+  gap:15px
+}
+
+/* Infobox compacta, no monstruosa. */
+.character-infobox{
+  position:sticky;top:10px;
+  overflow:hidden;
+  border:1px solid #765137;
+  border-radius:11px;
+  background:linear-gradient(180deg,rgba(47,29,23,.98),rgba(27,18,14,.99));
+  box-shadow:0 12px 30px rgba(0,0,0,.16)
+}
+.character-portrait{
+  width:100%;aspect-ratio:4/5;
+  display:grid;place-items:center;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 50% 20%,rgba(213,174,103,.08),transparent 36%),
+    #17100d
+}
+.character-portrait img{
+  width:100%;height:100%;object-fit:cover;display:block
+}
+.character-portrait-placeholder{
+  width:82px;height:82px;
+  display:grid;place-items:center;
+  color:#cfa765;
+  border:1px solid rgba(213,174,103,.28);
+  border-radius:50%;
+  background:rgba(213,174,103,.035)
+}
+.character-portrait-placeholder svg{width:46px;height:46px}
+.character-infobox-name{
+  padding:10px 11px;
+  border-top:1px solid #66472f;
+  border-bottom:1px solid #66472f;
+  background:linear-gradient(180deg,rgba(91,39,55,.70),rgba(70,29,40,.72));
+  color:#f0dfc5;
+  text-align:center;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:15px;font-weight:700
+}
+.infobox-section h3{
+  margin:0;padding:7px 9px;
+  border-bottom:1px solid rgba(94,65,44,.65);
+  background:rgba(213,174,103,.055);
+  color:#d5b57e;
+  font-size:8.5px;
+  letter-spacing:.08em;
+  text-transform:uppercase
+}
+.infobox-section dl{margin:0}
+.infobox-row{
+  display:grid;
+  grid-template-columns:84px minmax(0,1fr);
+  gap:7px;
+  padding:7px 9px;
+  border-bottom:1px solid rgba(78,53,36,.55)
+}
+.infobox-row:last-child{border-bottom:0}
+.infobox-row dt{
+  color:#9f8362;
+  font-size:8.5px;
+  line-height:1.35
+}
+.infobox-row dd{
+  margin:0;
+  color:#dbc7aa;
+  font-size:9.6px;
+  line-height:1.38;
+  min-width:0;
+  overflow-wrap:anywhere
+}
+.infobox-row dd a{
+  color:#ecc77f;
+  text-decoration:none;
+  border-bottom:1px dotted rgba(236,199,127,.45)
+}
+
+/* Artículo */
+.character-article{min-width:0}
+.character-tabs{
+  display:flex;flex-wrap:wrap;gap:4px;
+  margin-bottom:10px;
+  padding:5px;
+  border:1px solid rgba(101,69,45,.58);
+  border-radius:9px;
+  background:rgba(29,19,15,.90)
+}
+.character-tab{
+  min-height:32px;
+  padding:6px 8px;
+  border:0;border-radius:7px;
+  background:transparent;
+  color:#a88d6b;
+  display:flex;align-items:center;gap:5px;
+  font-size:9.5px;font-weight:600
+}
+.character-tab > span{
+  width:14px;height:14px;
+  display:grid;place-items:center
+}
+.character-tab svg{width:14px;height:14px}
+.character-tab:hover{
+  transition:background .10s ease,color .10s ease;
+  background:rgba(255,255,255,.035);
+  color:#ead8bd
+}
+.character-tab.active{
+  background:rgba(213,174,103,.13);
+  color:#f0d39b
+}
+.character-tab-panel{min-height:360px}
+
+.character-content-stack{display:grid;gap:11px}
+.character-section{
+  min-width:0;
+  padding:15px 16px;
+  border:1px solid #60422d;
+  border-radius:10px;
+  background:linear-gradient(180deg,rgba(34,22,17,.94),rgba(28,18,14,.97))
+}
+.character-section h2,
+.history-section h2{
+  margin:0 0 9px;
+  padding-bottom:6px;
+  border-bottom:1px solid rgba(95,65,44,.62);
+  color:#e2cda9;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:17px;font-weight:700
+}
+.character-prose{
+  color:#cbb69a;
+  font-size:11px;
+  line-height:1.72
+}
+.character-prose p{margin:0 0 9px}
+.character-prose p:last-child{margin-bottom:0}
+.character-prose a{
+  color:#ecc47a;text-decoration:none;
+  border-bottom:1px dotted rgba(236,196,122,.45)
+}
+.character-bullet-list,
+.research-list{
+  margin:0;padding-left:18px;
+  color:#cbb69a;font-size:10.7px;line-height:1.62
+}
+.character-bullet-list li+li,
+.research-list li+li{margin-top:5px}
+
+.trait-list{display:flex;gap:6px;flex-wrap:wrap}
+.trait-list span{
+  padding:5px 8px;
+  border:1px solid #6d4c33;
+  border-radius:999px;
+  background:#251812;
+  color:#d2b78e;
+  font-size:9px
+}
+.featured-quote{
+  margin:0;
+  position:relative;
+  padding:14px 16px 13px 34px;
+  border-left:2px solid #c99e5d;
+  border-radius:0 9px 9px 0;
+  background:linear-gradient(90deg,rgba(99,42,56,.30),rgba(35,22,17,.78))
+}
+.featured-quote::before{
+  content:"“";
+  position:absolute;left:10px;top:1px;
+  color:#d4aa66;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:34px;line-height:1
+}
+.featured-quote blockquote{
+  margin:0;
+  color:#ead8bc;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:13px;line-height:1.55
+}
+.featured-quote figcaption{
+  margin-top:6px;color:#957a5b;font-size:8.5px
+}
+
+.character-data-table{width:100%;border-collapse:collapse}
+.character-data-table th,
+.character-data-table td{
+  padding:7px 8px;
+  border-top:1px solid rgba(77,53,37,.68);
+  text-align:left;vertical-align:top
+}
+.character-data-table tr:first-child th,
+.character-data-table tr:first-child td{border-top:0}
+.character-data-table th{
+  width:28%;
+  color:#9d8161;
+  font-size:8.5px;text-transform:uppercase;letter-spacing:.04em
+}
+.character-data-table td{color:#d7c3a7;font-size:10.5px;line-height:1.45}
+
+/* Historia libre: no obliga a usar todos los arcos. */
+.character-history{
+  padding:15px 16px;
+  border:1px solid #60422d;
+  border-radius:10px;
+  background:linear-gradient(180deg,rgba(34,22,17,.94),rgba(28,18,14,.97))
+}
+.history-section{
+  padding-bottom:16px;margin-bottom:15px;
+  border-bottom:1px solid rgba(91,62,42,.50)
+}
+.history-section:last-child{padding-bottom:0;margin-bottom:0;border-bottom:0}
+.history-kicker{
+  margin:-3px 0 7px;
+  color:#9d805f;
+  font-size:8.8px;font-style:italic
+}
+
+/* Relaciones */
+.character-relation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.character-relation-card{
+  min-width:0;
+  padding:9px;
+  border:1px solid #553a28;
+  border-radius:9px;
+  background:#1c130f;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) auto;
+  gap:8px;align-items:start;
+  text-align:left
+}
+.character-relation-card:hover{
+  transition:background .10s ease,border-color .10s ease;
+  background:#2a1c16;border-color:#7b5537
+}
+.character-relation-icon{
+  width:34px;height:34px;
+  border-radius:8px;
+  display:grid;place-items:center;
+  background:rgba(213,174,103,.07);
+  color:#d2aa65
+}
+.character-relation-icon svg{width:20px;height:20px}
+.character-relation-body{min-width:0}
+.character-relation-body strong{
+  display:block;color:#e2cfb4;font-size:10.5px
+}
+.character-relation-body small{
+  display:block;margin-top:2px;color:#b0926d;font-size:8.5px
+}
+.character-relation-body > span{
+  display:block;margin-top:5px;
+  color:#9f8464;font-size:9.4px;line-height:1.45
+}
+
+/* Participación automática: enlaces, no biografía repetida. */
+.participation-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+  gap:7px
+}
+.participation-card{
+  min-width:0;
+  padding:8px 9px;
+  border:1px solid #553a28;
+  border-radius:8px;
+  background:#1c130f;
+  display:flex;align-items:center;gap:8px;text-align:left
+}
+.participation-card:hover{
+  transition:background .10s ease,border-color .10s ease;
+  background:#291b15;border-color:#7a5337
+}
+.participation-icon{
+  flex:0 0 28px;width:28px;height:28px;
+  display:grid;place-items:center;
+  border-radius:7px;
+  background:rgba(213,174,103,.07);
+  color:#cda563
+}
+.participation-icon svg{width:17px;height:17px}
+.participation-card strong{
+  display:block;color:#dac6aa;font-size:9.8px
+}
+.participation-card small{
+  display:block;margin-top:2px;color:#917658;font-size:8px
+}
+
+/* Galería */
+.gallery-toolbar{
+  display:flex;gap:5px;flex-wrap:wrap;
+  margin-bottom:10px
+}
+.gallery-filter{
+  padding:5px 8px;
+  border:1px solid #60422d;
+  border-radius:999px;
+  background:#1c130f;
+  color:#9f8464;
+  font-size:8.7px
+}
+.gallery-filter:hover{
+  transition:background .10s ease,color .10s ease;
+  background:#2b1c16;color:#dbc6aa
+}
+.gallery-filter.active{
+  border-color:#9a6c43;
+  background:rgba(213,174,103,.11);
+  color:#eac88f
+}
+.character-gallery-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:8px
+}
+.character-gallery-card{
+  overflow:hidden;
+  border:1px solid #5b3f2b;
+  border-radius:9px;
+  background:#1b120e
+}
+.character-gallery-card img,
+.gallery-placeholder{
+  width:100%;aspect-ratio:4/3;
+  object-fit:cover;display:block
+}
+.gallery-placeholder{
+  display:grid;place-items:center;
+  color:#b68f5c;background:#17100c
+}
+.gallery-placeholder svg{width:35px;height:35px}
+.gallery-caption{padding:8px}
+.gallery-caption strong{display:block;color:#ddc9ae;font-size:9.8px}
+.gallery-caption small{
+  display:block;margin-top:3px;
+  color:#907557;font-size:8.4px;line-height:1.4
+}
+
+/* Investigación */
+.canon-status{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:6px 9px;
+  border:1px solid #60422d;
+  border-radius:8px;
+  background:#1c130f;
+  color:#cdb795;font-size:9.5px
+}
+.canon-status > span{
+  width:7px;height:7px;border-radius:50%;
+  background:#7db68f;
+  box-shadow:0 0 9px rgba(125,182,143,.24)
+}
+
+@media(max-width:980px){
+  .character-wiki-layout{grid-template-columns:220px minmax(0,1fr)}
+  .character-relation-grid{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .character-wiki-layout{grid-template-columns:1fr}
+  .character-infobox{position:relative;top:auto;max-width:340px}
+  .character-tabs{overflow-x:auto;flex-wrap:nowrap}
+  .character-tab{flex:0 0 auto}
+}

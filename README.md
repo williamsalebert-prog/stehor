@@ -32,3 +32,24 @@ Consulta `PLANTILLA_0.md` para el esquema de datos.
 
 ## Publicación
 No requiere compilación. Puede subirse directamente a GitHub Pages.
+
+
+## A6 — Personajes, Tanda 0
+
+Primera plantilla específica de Personajes.
+
+La ficha adopta una estructura tipo wiki:
+- infobox compacta a la izquierda;
+- artículo principal a la derecha;
+- siete pestañas;
+- campos opcionales;
+- Historia con subtítulos libres;
+- relaciones con notas propias;
+- participación cruzada automática/semi-automática;
+- galería filtrable;
+- investigación separada;
+- identificación técnica plegada.
+
+La aplicación no interpreta el dinamismo narrativo. Toda contextualización de cambios se redacta manualmente por el autor.
+
+Consulta `PERSONAJES_TANDA0.md`.
