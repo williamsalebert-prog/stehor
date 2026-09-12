@@ -135,10 +135,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   background:rgba(66,43,31,.90);
   color:#c9a36c;
   font-size:11px;line-height:18px;
-  transition:.13s ease;
   z-index:3
 }
-.home-resize:hover{background:#523526;color:#f0d498}
+.home-resize:hover{
+  transition:background .10s ease,color .10s ease;
+  background:#523526;color:#f0d498
+}
 .resize-glyph{display:block;transform:translateY(-1px)}
 
 /* SIDEBAR */
@@ -212,10 +214,22 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .file-label{cursor:pointer}
 
 /* SIDEBAR CONTRAÍDO */
+#app.sidebar-collapsed .home-cluster{
+  width:50px;
+  min-height:72px;
+  height:72px;
+  margin:0 auto
+}
 #app.sidebar-collapsed .home-main{
-  grid-template-columns:1fr;
-  justify-items:center;
-  padding-left:0;padding-right:0
+  height:72px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:6px 0 0
+}
+#app.sidebar-collapsed .brand-s{
+  align-self:auto;
+  margin:0
 }
 #app.sidebar-collapsed .home-copy,
 #app.sidebar-collapsed .sidebar-label,
@@ -223,7 +237,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 #app.sidebar-collapsed .footer-text{
   width:0;opacity:0;overflow:hidden;pointer-events:none
 }
-#app.sidebar-collapsed .home-resize{left:19px}
+#app.sidebar-collapsed .home-resize{
+  left:50%;
+  bottom:5px;
+  transform:translateX(-50%)
+}
 #app.sidebar-collapsed .nav-item{
   justify-content:center;
   padding-left:0;padding-right:0
@@ -239,18 +257,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 /* MAIN */
 .main{min-width:0}
 #view{
-  max-width:1420px;
+  max-width:1480px;
   margin:0 auto;
-  padding:24px 26px 38px;
-  animation:viewEnter .2s cubic-bezier(.2,.78,.25,1)
-}
-@keyframes viewEnter{
-  from{opacity:.08;transform:translateY(5px)}
-  to{opacity:1;transform:none}
+  padding:22px 22px 36px
 }
 
 /* HOME */
-.home-shell{max-width:1100px;margin:0 auto}
+.home-shell{max-width:1320px;margin:0 auto}
 .home-title-wrap{
   display:flex;justify-content:center;
   margin:4px 0 22px
@@ -293,7 +306,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 }
 .home-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(132px,150px));
+  grid-template-columns:repeat(8,minmax(0,1fr));
   justify-content:center;
   gap:11px
 }
@@ -314,27 +327,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   align-items:center;justify-content:center;
   padding:10px;
   text-align:center;
-  opacity:0;
-  animation:cardReveal .34s cubic-bezier(.2,.75,.25,1) forwards;
-  animation-delay:var(--delay);
-  transition:
-    transform .15s ease,
-    box-shadow .15s ease,
-    border-color .15s ease,
-    background .15s ease
 }
-@keyframes cardReveal{
-  from{opacity:0;transform:translateY(8px) scale(.985)}
-  to{opacity:1;transform:none}
-}
+
 .menu-card::before,
 .menu-card::after{
   content:"";
   position:absolute;
   width:28px;height:28px;
   border:1px solid rgba(213,174,103,.74);
-  opacity:.70;
-  transition:width .16s ease,height .16s ease,opacity .16s ease
+  opacity:.70
 }
 .menu-card::before{
   left:6px;top:6px;border-right:0;border-bottom:0;border-radius:6px 0 0 0
@@ -343,32 +344,35 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   right:6px;bottom:6px;border-left:0;border-top:0;border-radius:0 0 6px 0
 }
 .menu-card .card-shine{
-  position:absolute;inset:-40% -80%;
-  background:linear-gradient(115deg,transparent 44%,rgba(255,230,182,.08) 50%,transparent 56%);
-  transform:translateX(-24%);
-  transition:transform .45s ease;
+  position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 4%,rgba(255,230,182,.035),transparent 42%);
   pointer-events:none
 }
 .menu-card:hover{
-  transform:translateY(-3px);
+  transition:transform .11s ease,box-shadow .11s ease,border-color .11s ease,background .11s ease;
+  transform:translateY(-2px);
   border-color:var(--gold-hi);
   background:
-    radial-gradient(circle at 50% 8%,rgba(239,201,127,.12),transparent 46%),
-    linear-gradient(180deg,rgba(108,48,64,.97),rgba(77,30,43,.98));
-  box-shadow:var(--shadow)
+    radial-gradient(circle at 50% 8%,rgba(239,201,127,.11),transparent 46%),
+    linear-gradient(180deg,rgba(104,46,62,.97),rgba(75,29,42,.98));
+  box-shadow:0 10px 24px rgba(0,0,0,.20)
 }
 .menu-card:hover::before,
 .menu-card:hover::after{
-  width:34px;height:34px;opacity:.95
+  transition:width .10s ease,height .10s ease,opacity .10s ease;
+  width:31px;height:31px;opacity:.88
 }
-.menu-card:hover .card-shine{transform:translateX(38%)}
-.menu-card:hover .menu-icon{transform:translateY(-2px) scale(1.04);filter:drop-shadow(0 3px 8px rgba(213,174,103,.18))}
+
+.menu-card:hover .menu-icon{
+  transition:transform .10s ease,filter .10s ease;
+  transform:translateY(-1px) scale(1.025);
+  filter:drop-shadow(0 2px 6px rgba(213,174,103,.14))
+}
 .menu-icon{
   width:34px;height:34px;
   display:grid;place-items:center;
   color:#efc97f;
-  margin-bottom:9px;
-  transition:transform .16s ease,filter .16s ease
+  margin-bottom:9px
 }
 .menu-icon svg{
   width:32px;height:32px;
@@ -426,10 +430,6 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     radial-gradient(circle at 50% 8%,rgba(213,174,103,.055),transparent 45%),
     linear-gradient(180deg,rgba(48,31,24,.98),rgba(34,22,17,.99));
   color:#f0e2cf;
-  opacity:0;
-  animation:cardReveal .30s cubic-bezier(.2,.75,.25,1) forwards;
-  animation-delay:var(--delay);
-  transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease
 }
 .item-card::before,
 .item-card::after{
@@ -443,12 +443,19 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .item-card::before{left:6px;top:6px;border-right:0;border-bottom:0}
 .item-card::after{right:6px;bottom:6px;border-left:0;border-top:0}
 .item-card:hover{
-  transform:translateY(-3px);
+  transition:transform .10s ease,box-shadow .10s ease,border-color .10s ease;
+  transform:translateY(-2px);
   border-color:#d3aa63;
-  box-shadow:var(--shadow)
+  box-shadow:0 10px 24px rgba(0,0,0,.20)
 }
-.item-card:hover .item-image{transform:scale(1.035)}
-.item-card:hover .item-placeholder svg{transform:scale(1.06) rotate(-2deg)}
+.item-card:hover .item-image{
+  transition:transform .11s ease;
+  transform:scale(1.02)
+}
+.item-card:hover .item-placeholder svg{
+  transition:transform .10s ease;
+  transform:scale(1.025)
+}
 .item-visual{
   width:100%;
   height:calc(100% - 34px);
@@ -459,8 +466,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .item-image{
   width:100%;height:100%;
   object-fit:cover;
-  display:block;
-  transition:transform .28s ease
+  display:block
 }
 .item-placeholder{
   width:42px;height:42px;
@@ -468,8 +474,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   display:grid;place-items:center
 }
 .item-placeholder svg{
-  width:39px;height:39px;
-  transition:transform .18s ease
+  width:39px;height:39px
 }
 .item-title{
   min-height:34px;
@@ -689,10 +694,12 @@ textarea.big{
 }
 .hidden{display:none!important}
 
-@media(max-width:1100px){
-  :root{--card:144px}
-  .home-grid{grid-template-columns:repeat(auto-fit,minmax(128px,145px))}
+@media(max-width:1280px){
+  .home-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
   .cards-grid{grid-template-columns:repeat(auto-fill,minmax(128px,145px))}
+}
+@media(max-width:1020px){
+  .home-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
 @media(max-width:860px){
   :root{--sidebar-wide:214px}

@@ -60,3 +60,12 @@ Sube:
 - carpeta `data/`
 
 a la raíz que publica GitHub Pages.
+
+
+## A4.1 — ajuste de espacio y microinteracciones
+- La portada aprovecha más el ancho útil: hasta 8 tarjetas por fila en escritorio amplio.
+- Eliminada la animación de entrada de tarjetas y de la vista.
+- Hover reducido a una microanimación breve al acercar el cursor.
+- Al retirar el cursor, la tarjeta vuelve inmediatamente sin una animación inversa.
+- Eliminado el barrido/brillo móvil de las tarjetas.
+- Corregido el bloque contraído de Inicio: el botón `⇔` queda centrado exactamente debajo de la S.
