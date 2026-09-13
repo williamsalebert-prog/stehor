@@ -30,105 +30,196 @@ window.SETHORIA_DEMO = {
     {
       id:"demo-esteban",
       title:"Esteban",
-      subtitle:"Ejemplo de la primera plantilla de Personajes",
+      subtitle:"Miembro del grupo principal",
       category:"personajes",
       masterTag:"personaje_esteban",
-      aliases:[],
-      tags:["grupo-principal","demo"],
-      summary:"Mexicano y estudiante de ingeniería al llegar a Sethoria. La ficha está redactada como una wiki estática: cualquier cambio de edad, grupo, relación o personalidad se explica únicamente cuando el autor considera que aporta contexto.",
+      aliases:["Chogui","Estebancito"],
+      tags:["grupo-principal","mexico","demo"],
+      summary:"Mexicano y estudiante de ingeniería al llegar a Sethoria. En sus primeras interacciones puede ser extremadamente tímido e inseguro, pero cuando adquiere confianza llega a desenvolverse con mucha soltura. Es noble, observador, prudente y analítico; combina formación técnica con un conocimiento especialmente amplio de criaturas mitológicas y legendarias.",
       fullName:"Esteban",
       ageText:"21 años (inicio del Libro 1)",
       origin:"México",
       nationality:"Mexicana",
       firstAppearance:"Piratas",
-      groupText:"Grupo principal",
-      relationshipText:"Eulalia (desde ebu gogo)",
+      importantRelations:["Eulalia","Wiremu"],
       status:"Vivo",
+
       relations:[
-        {targetId:"demo-eulalia",type:"Pareja",note:"Se conocen en Piratas; su relación evoluciona gradualmente y se formaliza en ebu gogo."},
-        {targetId:"demo-grupo",type:"Miembro"}
+        {
+          targetId:"demo-eulalia",
+          type:"Pareja",
+          symbol:"♥",
+          note:"Se conocen durante Piratas. Esteban siente atracción antes de que Eulalia muestre un interés comparable; durante Japón la cercanía aumenta, en ebu gogo comienzan una relación y para Mali ya funcionan como una pareja estable."
+        },
+        {
+          targetId:"demo-wiremu",
+          type:"Amigo / apoyo",
+          symbol:"✦",
+          note:"Wiremu es una de las principales figuras de apoyo para Esteban."
+        }
       ],
+
       character:{
         info:{
           personal:[
-            {label:"Nombre completo",value:"Esteban"},
+            {label:"Nombre",value:"Esteban"},
+            {
+              label:"También conocido como",
+              value:[
+                "Chogui (todo el grupo)",
+                "Estebancito (Eulalia, Lucila, Tina, Ariadna y Emiliano)"
+              ]
+            },
             {label:"Edad",value:"21 años (inicio del Libro 1)"},
             {label:"Origen",value:"México"},
-            {label:"Nacionalidad",value:"Mexicana"}
+            {label:"Nacionalidad",value:"Mexicana"},
+            {label:"Formación",value:"Estudiante de ingeniería"}
           ],
           narrative:[
             {label:"Primera aparición",value:"Piratas"},
-            {label:"Grupo",value:"Grupo principal"},
-            {label:"Pareja",value:"Eulalia (desde ebu gogo)"},
+            {
+              label:"Relaciones importantes",
+              value:[
+                "Eulalia — pareja (desde ebu gogo)",
+                "Wiremu — amigo y apoyo"
+              ]
+            },
             {label:"Estado",value:"Vivo"}
           ]
         },
-        introduction:"Esteban forma parte del grupo central de viajeros. Su ficha usa una estructura enciclopédica tradicional, pero deja la contextualización narrativa en manos del autor: si un dato cambia, el propio texto puede aclararlo con un paréntesis, una frase o una subsección; si permanece estable, se presenta una sola vez.",
-        traits:["Tímido al inicio","Noble","Inseguro","Práctico"],
+
+        introduction:"Esteban integra el grupo principal de viajeros. Su timidez es especialmente fuerte durante las primeras interacciones —desde un día hasta varias semanas, dependiendo de la situación—, pero no define permanentemente su forma de relacionarse: cuando la conversación fluye puede parecer casi extrovertido. Tiende al autosabotaje y a dudar de sí mismo. Aun así, suele analizar antes de actuar, distingue entre hacer daño y matar y puede intervenir en decisiones difíciles cuando considera que la situación lo exige.",
+
+        traits:[
+          "Extremadamente tímido al inicio",
+          "Noble",
+          "Analítico",
+          "Observador",
+          "Prudente",
+          "Inseguro / autosabotaje"
+        ],
+
         profile:{
-          appearance:"La descripción física general se escribe aquí. Si existe un cambio realmente visible —por ejemplo una cicatriz, un cambio marcado de peinado o una lesión— puede explicarse en este mismo apartado sin crear una ficha distinta por arco.",
-          personality:"Al comienzo puede mostrarse extremadamente tímido en sus primeras interacciones. Conforme adquiere confianza puede desenvolverse con mucha mayor soltura. Los cambios narrativos se redactan de manera natural cuando son relevantes; la aplicación no decide por sí misma cuándo existe una nueva etapa.",
-          motivations:"Aquí se describen objetivos, prioridades y motivos personales sin repetir los acontecimientos completos que ya pertenecen a Historia o Eventos.",
+          personality:"Con desconocidos, la timidez de Esteban puede ser extrema durante las primeras interacciones. Con confianza puede desenvolverse con mucha mayor soltura e incluso parecer casi extrovertido. Tiende a subestimarse y a sabotear sus propias expectativas. Es cuidadoso al tomar decisiones, evalúa la información antes de actuar y no equipara automáticamente hacer daño con matar.",
+          conflicts:"La inseguridad y la falta de confianza en sí mismo son conflictos recurrentes. Durante Japón, después de momentos de fuerte tensión y cansancio, una Kitsune llega a insistirle en que necesita tener más fe en sí mismo.",
           capabilities:[
-            "Formación de ingeniería.",
+            "Formación universitaria en ingeniería.",
+            "Conocimiento excepcional de criaturas mitológicas, animales fantásticos y leyendas; reconoce, entre otros, al Wendigo, Nue, Pouakai y el Holandés Errante.",
             "Supervivencia básica.",
-            "Conocimientos prácticos que resulten relevantes para la historia."
+            "Capacidad para analizar problemas y detectar información táctica incompleta.",
+            "Puede resistir entre uno y dos días sin dormir cuando la situación lo exige, aunque el cansancio termina afectándolo.",
+            "Ha comido insectos y no los considera automáticamente algo imposible de consumir."
           ],
-          limitations:"Este bloque sirve para debilidades, carencias o límites reales del personaje. No debe convertirse en una lista de estadísticas de videojuego.",
-          habits:"Intereses, costumbres y hábitos que aporten caracterización pueden registrarse aquí cuando tengan utilidad narrativa."
+          limitations:"No es un especialista universal. Su formación y sus conocimientos tienen límites claros, y el cansancio, la inseguridad o la falta de experiencia en campos específicos pueden afectarlo. Cuando un problema rebasa su formación necesita apoyarse en personas con conocimientos más especializados.",
+          habits:[
+            "Muestra una afinidad especial por adultos mayores, niños y perros; con ellos suele perder la timidez más fácilmente.",
+            "Puede conversar durante horas con adultos sobre anécdotas y experiencias.",
+            "Conoce y valora tradiciones como radios locales, peregrinaciones, danzas y mayordomías.",
+            "Suele sentirse atraído por mujeres que percibe como particulares o distintas; esa preferencia no elimina su tendencia a autosabotear cualquier expectativa romántica."
+          ]
         },
+
         history:[
           {
             title:"Antes de Sethoria",
-            body:"Aquí se resume únicamente la información previa necesaria para entender al personaje. No es necesario reconstruir toda su vida si no aporta a la novela."
+            body:"Es mexicano y estudiante de ingeniería. Antes de llegar ya posee un conocimiento poco común sobre seres mitológicos, animales fantásticos y leyendas, aprendido principalmente mediante libros y bibliotecas. También cuenta con conocimientos básicos de supervivencia y familiaridad con diversas tradiciones populares mexicanas."
           },
           {
             title:"Piratas",
-            body:"Primera etapa relevante del Libro 1. Esta subsección existe porque hay información que contar; otros arcos pueden omitirse por completo si no añaden nada nuevo."
+            body:"Durante el arco de los Piratas conoce a Eulalia. La atracción aparece primero del lado de Esteban; por su propia inseguridad no la convierte inmediatamente en una expectativa de relación. Esta etapa también establece su convivencia inicial con varios de los viajeros que después forman parte de su círculo cercano."
           },
           {
             title:"Japón",
-            body:"La historia del personaje puede organizarse mediante arcos cuando eso resulte natural, pero los arcos no son campos obligatorios ni unidades automáticas de evolución."
+            body:"Su interés por Eulalia aumenta gradualmente. Durante la crisis del Wendigo participa junto con Eulalia, Wiremu e Isamu y coopera con el clan de Chiba. Su conocimiento de criaturas resulta útil para identificar amenazas y proponer cómo enfrentarlas. También interviene en decisiones delicadas posteriores, incluida la gestión de información sobre la muerte de Akira y sus posibles consecuencias políticas. Tras la tensión acumulada necesita descansar; una Kitsune le insiste en que debería confiar más en sí mismo."
+          },
+          {
+            title:"ebu gogo",
+            body:"La relación entre Esteban y Eulalia deja de ser únicamente una cercanía creciente y ambos pasan a ser pareja."
+          },
+          {
+            title:"Mali",
+            body:"Para esta etapa Esteban y Eulalia ya funcionan como una pareja estable. Durante los acontecimientos ligados a los argentinos de Villa Epecuén tiene roces con Alfredo Houssay, mientras Matías Ferreyra y Verónica Bianchi consiguen su confianza con mayor rapidez."
+          },
+          {
+            title:"Constantinopla",
+            body:"La relación con Eulalia atraviesa intentos de reconciliación. En uno de ellos mantienen relaciones sexuales y Eulalia queda embarazada; la situación tiene un componente irónico porque ocurre precisamente en un momento de menor intimidad emocional que otros intentos de reconciliación."
           }
         ],
+
         relationships:{
           personal:[
             {
               targetId:"demo-eulalia",
               type:"Pareja",
-              note:"La sección describe la evolución específica del vínculo sin volver a narrar toda la Historia. Se conocen en Piratas, la cercanía aumenta después y comienzan una relación en ebu gogo."
+              symbol:"♥",
+              note:"Se conocen en Piratas. Esteban siente una pequeña atracción desde temprano, mientras Eulalia inicialmente apenas repara en él. Durante Japón aumenta la cercanía; en ebu gogo comienzan una relación, en Mali son una pareja estable y en Constantinopla atraviesan una etapa de reconciliación que culmina en un embarazo."
+            },
+            {
+              targetId:"demo-wiremu",
+              type:"Amigo / apoyo",
+              symbol:"✦",
+              note:"Wiremu sirve como apoyo directo para Esteban y es una de las personas en las que puede apoyarse cuando sus inseguridades o la situación lo superan."
             }
-          ],
-          other:[
-            {targetId:"demo-grupo",type:"Grupo principal",note:"La pertenencia se referencia aquí sin duplicar la ficha completa del grupo."}
           ]
         },
+
         participation:{
           grupos:["demo-grupo"],
           batallas:["demo-batalla-bagdad"],
           lugares:["demo-bagdad"]
         },
+
         gallery:[
-          {title:"Retrato principal",category:"Retratos",caption:"La imagen principal de la ficha iría aquí."},
-          {title:"Cuerpo completo",category:"Cuerpo completo",caption:"Vista general del personaje."},
-          {title:"Atuendo de Japón",category:"Atuendos",caption:"Ejemplo de una imagen contextual sin convertir la ficha completa en una ficha por arco."},
-          {title:"Equipo",category:"Equipo",caption:"Objetos o equipo visualmente relevantes."}
+          {
+            title:"Retrato principal",
+            category:"Retratos",
+            caption:"Pendiente de sustituir por una imagen definitiva de Esteban."
+          },
+          {
+            title:"Cuerpo completo",
+            category:"Cuerpo completo",
+            caption:"Espacio previsto para una vista general del personaje."
+          },
+          {
+            title:"Atuendo por etapa",
+            category:"Atuendos",
+            caption:"Puede utilizarse cuando un cambio de ropa sea visualmente relevante; no hace falta una imagen por cada arco."
+          },
+          {
+            title:"Equipo",
+            category:"Equipo",
+            caption:"Objetos o equipo visualmente relevantes."
+          }
         ],
+
         research:{
-          canon:"Plantilla de demostración",
+          canon:"Canon recopilado / demo",
           pending:[
-            "Sustituir los textos de demostración por información real.",
-            "Añadir imágenes reales cuando estén disponibles."
+            "Completar nombre completo si se define.",
+            "Definir fecha exacta de nacimiento si llega a establecerse.",
+            "Añadir una descripción física canónica antes de llenar Apariencia.",
+            "Sustituir los marcadores de galería por imágenes reales.",
+            "Añadir firma solo si llega a existir una firma canónica o una imagen preparada."
           ],
           notes:[
-            "El dinamismo narrativo lo redacta el autor. La plantilla no interpreta automáticamente cambios de personalidad, relaciones o etapas."
+            "La contextualización de cambios sigue siendo manual: la plantilla no decide por sí sola cuándo una relación, personalidad, edad o etapa necesita una aclaración.",
+            "No se ha inventado una descripción física porque todavía no existe información suficientemente establecida para rellenarla."
           ]
         }
       },
+
       sources:[
-        {title:"Fuente de demostración",note:"Las fuentes reales del personaje se registrarían aquí."}
+        {
+          title:"Manuscrito Sethoria Version 120",
+          note:"Base de varias acciones y rasgos mostrados durante Japón y la crisis del Wendigo."
+        },
+        {
+          title:"Chats de desarrollo de Sethoria",
+          note:"Base de personalidad, relación con Eulalia, habilidades, hábitos y organización narrativa."
+        }
       ]
     },
+
     {
       id:"demo-eulalia",
       title:"Eulalia",
@@ -136,16 +227,39 @@ window.SETHORIA_DEMO = {
       masterTag:"personaje_eulalia",
       aliases:[],
       tags:["grupo-principal","demo"],
-      summary:"Entidad de demostración conectada con Esteban.",
+      summary:"Chamana y miembro del grupo principal. Esta ficha mínima existe para que el demo de relaciones de Esteban tenga un enlace real.",
       ageText:"28 años (inicio del Libro 1)",
-      origin:"—",
-      nationality:"—",
       firstAppearance:"Piratas",
-      groupText:"Grupo principal",
-      relationshipText:"Esteban (desde ebu gogo)",
       status:"Viva",
-      relations:[{targetId:"demo-esteban",type:"Pareja",note:"Relación de demostración."}]
+      relations:[
+        {
+          targetId:"demo-esteban",
+          type:"Pareja",
+          symbol:"♥",
+          note:"La relación comienza en ebu gogo."
+        }
+      ]
     },
+
+    {
+      id:"demo-wiremu",
+      title:"Wiremu",
+      category:"personajes",
+      masterTag:"personaje_wiremu",
+      aliases:[],
+      tags:["grupo-principal","demo"],
+      summary:"Miembro del grupo principal y una de las principales figuras de apoyo para Esteban.",
+      status:"Vivo",
+      relations:[
+        {
+          targetId:"demo-esteban",
+          type:"Amigo / apoyo",
+          symbol:"✦",
+          note:"Apoyo directo para Esteban."
+        }
+      ]
+    },
+
     {
       id:"demo-bagdad",
       title:"Bagdad",
@@ -156,6 +270,7 @@ window.SETHORIA_DEMO = {
       summary:"Lugar de demostración relacionado con Esteban.",
       relations:[{targetId:"demo-esteban",type:"Personaje relacionado"}]
     },
+
     {
       id:"demo-batalla-bagdad",
       title:"Batalla de Bagdad",
@@ -173,6 +288,7 @@ window.SETHORIA_DEMO = {
         {targetId:"demo-esteban",type:"Participante"}
       ]
     },
+
     {
       id:"demo-grupo",
       title:"Grupo principal",
@@ -180,14 +296,16 @@ window.SETHORIA_DEMO = {
       masterTag:"grupo_principal",
       aliases:["Grupo A"],
       tags:["demo"],
-      summary:"Grupo de ejemplo con Esteban y Eulalia.",
+      summary:"Grupo de ejemplo que referencia a Esteban, Eulalia y Wiremu.",
       members:[
         {targetId:"demo-esteban",role:"Miembro"},
-        {targetId:"demo-eulalia",role:"Miembro"}
+        {targetId:"demo-eulalia",role:"Miembro"},
+        {targetId:"demo-wiremu",role:"Miembro"}
       ],
       relations:[
         {targetId:"demo-esteban",type:"Miembro"},
-        {targetId:"demo-eulalia",type:"Miembro"}
+        {targetId:"demo-eulalia",type:"Miembro"},
+        {targetId:"demo-wiremu",type:"Miembro"}
       ]
     }
   ]
