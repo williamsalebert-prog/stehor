@@ -1,5 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
+  const APP_BUILD = "A6.2-personajes";
   const STORE = "entities";
 
   let db;
@@ -217,8 +218,21 @@
   }
   async function ensureSeed(){
     const all=await getAll();
-    if(all.length) return all;
-    for(const e of window.SETHORIA_DEMO.seedEntities) await putEntity(e);
+
+    if(!all.length){
+      for(const e of window.SETHORIA_DEMO.seedEntities) await putEntity(e);
+      return getAll();
+    }
+
+    // Refresca únicamente las entidades demo-* para que los cambios
+    // de prototipo sí se vean entre versiones. No toca datos reales.
+    const demoSeeds = window.SETHORIA_DEMO.seedEntities || [];
+    for(const seed of demoSeeds){
+      if(String(seed.id || "").startsWith("demo-")){
+        await putEntity(seed);
+      }
+    }
+
     return getAll();
   }
 
@@ -1575,6 +1589,7 @@
   }
 
   async function init(){
+    console.info("Sethoria Atlas", APP_BUILD);
     buildNav();
     hydrateStaticIcons();
     restoreSidebar();

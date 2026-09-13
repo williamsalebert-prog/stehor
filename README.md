@@ -61,3 +61,10 @@ Consulta `PERSONAJES_TANDA0.md`.
 - Relaciones admite símbolos opcionales elegidos por el autor.
 - El demo de Esteban fue ampliado con información ya establecida en conversaciones y manuscrito.
 - No se inventaron fecha exacta de nacimiento ni apariencia física.
+
+
+## A6.2 — corrección de actualización visible
+- La IndexedDB anterior conservaba los registros `demo-*`, así que el nuevo Esteban podía no cargarse.
+- Ahora se refrescan únicamente las entidades `demo-*` al iniciar.
+- Los datos reales del usuario no se sobrescriben.
+- Se agregaron `?v=a62` a CSS, JavaScript y demo-data para evitar caché vieja en GitHub Pages/navegador.
