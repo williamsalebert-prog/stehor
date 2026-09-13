@@ -795,8 +795,7 @@
 
     const narrative=normalizeRows(info.narrative || c.narrative || [
       e.firstAppearance ? {label:"Primera aparición",value:e.firstAppearance} : null,
-      e.groupText ? {label:"Grupo / afiliación",value:e.groupText} : null,
-      e.relationshipText ? {label:"Relación",value:e.relationshipText} : null,
+      e.importantRelations ? {label:"Relaciones importantes",value:e.importantRelations} : null,
       e.status ? {label:"Estado",value:e.status} : null
     ].filter(Boolean));
 
@@ -807,6 +806,17 @@
       {title:"Información narrativa",rows:narrative},
       {title:"Aspecto básico",rows:appearance}
     ].filter(group=>group.rows.length);
+  }
+
+  function renderInfoboxValue(value,e){
+    if(Array.isArray(value)){
+      return `<ul class="infobox-simple-list">${value.map(item=>{
+        if(typeof item==="string") return `<li>${linkifyText(item,e.id)}</li>`;
+        const text=item.text ?? item.value ?? item.label ?? "";
+        return `<li>${linkifyText(String(text),e.id)}</li>`;
+      }).join("")}</ul>`;
+    }
+    return linkifyText(String(value ?? ""),e.id);
   }
 
   function renderCharacterInfobox(e){
@@ -829,7 +839,7 @@
             ${group.rows.map(row=>`
               <div class="infobox-row">
                 <dt>${esc(row.label)}</dt>
-                <dd>${linkifyText(String(row.value),e.id)}</dd>
+                <dd>${renderInfoboxValue(row.value,e)}</dd>
               </div>
             `).join("")}
           </dl>
@@ -962,14 +972,15 @@
     const normalize=(items,defaultType="Relación")=>toArray(items).map(item=>{
       if(typeof item==="string"){
         const target=entities.find(x=>x.id===item || x.masterTag===item || x.title===item);
-        return target ? {target,type:defaultType,note:""} : null;
+        return target ? {target,type:defaultType,note:"",symbol:""} : null;
       }
       const id=item.targetId || item.id || item.entityId || item.target;
       const target=entities.find(x=>x.id===id || x.masterTag===id || x.title===id);
       return target ? {
         target,
         type:item.type || item.role || item.label || defaultType,
-        note:item.note || item.description || item.text || ""
+        note:item.note || item.description || item.text || "",
+        symbol:item.symbol || ""
       } : null;
     }).filter(Boolean);
 
@@ -998,7 +1009,7 @@
     if(!items.length) return `<div class="empty">Sin relaciones registradas todavía.</div>`;
     return `<div class="character-relation-grid">${items.map(r=>`
       <button class="character-relation-card" data-open-related="${r.target.id}">
-        <span class="character-relation-icon">${icon(r.target.category)}</span>
+        <span class="character-relation-icon ${r.symbol ? "has-manual-symbol" : ""}">${r.symbol ? esc(r.symbol) : icon(r.target.category)}</span>
         <span class="character-relation-body">
           <strong>${esc(r.target.title)}</strong>
           <small>${esc(r.type || "Relación")}</small>

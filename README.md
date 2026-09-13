@@ -53,3 +53,11 @@ La ficha adopta una estructura tipo wiki:
 La aplicación no interpreta el dinamismo narrativo. Toda contextualización de cambios se redacta manualmente por el autor.
 
 Consulta `PERSONAJES_TANDA0.md`.
+
+
+## A6.1 — equilibrio + demo ampliado de Esteban
+- Campos múltiples simples pueden ser listas, sin subformularios innecesarios.
+- La ficha rápida usa `Relaciones importantes` en vez de obligar a separar Grupo/Pareja.
+- Relaciones admite símbolos opcionales elegidos por el autor.
+- El demo de Esteban fue ampliado con información ya establecida en conversaciones y manuscrito.
+- No se inventaron fecha exacta de nacimiento ni apariencia física.

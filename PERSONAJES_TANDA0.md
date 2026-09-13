@@ -191,3 +191,37 @@ Permanece plegada:
 - No añade edición web todavía.
 
 La siguiente tanda podrá modificar esta plantilla después de probarla visualmente con personajes reales.
+
+
+## A6.1 — equilibrio entre estructura y libertad
+
+No todos los datos múltiples necesitan una subcategoría.
+
+Ejemplo:
+
+```js
+{
+  label: "También conocido como",
+  value: [
+    "Chogui (todo el grupo)",
+    "Estebancito (Eulalia, Lucila, Tina, Ariadna y Emiliano)"
+  ]
+}
+```
+
+La plantilla lo presenta como una lista sencilla dentro de una sola fila. No obliga a crear para cada apodo un formulario de emisor, fecha, arco y contexto.
+
+La ficha rápida deja de imponer campos separados de `Grupo` y `Pareja`; puede utilizar un campo flexible de `Relaciones importantes`.
+
+La pestaña Relaciones admite simbología opcional escogida por el autor:
+
+```js
+{
+  targetId: "personaje_eulalia",
+  type: "Pareja",
+  symbol: "♥",
+  note: "..."
+}
+```
+
+La aplicación no asigna automáticamente el significado de los símbolos.

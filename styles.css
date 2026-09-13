@@ -875,3 +875,23 @@ textarea.big{
   .character-tabs{overflow-x:auto;flex-wrap:nowrap}
   .character-tab{flex:0 0 auto}
 }
+
+
+/* A6.1 — valores múltiples simples sin sobreestructurarlos. */
+.infobox-simple-list{
+  margin:0;
+  padding-left:15px;
+}
+.infobox-simple-list li{
+  margin:0 0 3px;
+  line-height:1.38;
+}
+.infobox-simple-list li:last-child{margin-bottom:0}
+
+/* Simbología opcional elegida por el autor en Relaciones. */
+.character-relation-icon.has-manual-symbol{
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:18px;
+  line-height:1;
+  color:#edc77d;
+}
