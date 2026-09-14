@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.5-personajes-edicion-directa";
+  const APP_BUILD = "A6.6-lugares-mapas";
   const STORE = "entities";
 
   let db;
@@ -220,17 +220,17 @@
     const all=await getAll();
     if(!all.length){
       for(const e of window.SETHORIA_DEMO.seedEntities) await putEntity(e);
-      localStorage.setItem("sethoria-demo-build","a65");
+      localStorage.setItem("sethoria-demo-build","a66");
       return getAll();
     }
 
-    // La demo se migra una sola vez a la estructura A6.5. Después, incluso
+    // La demo se migra una sola vez a la estructura A6.6. Después, incluso
     // los registros demo-* quedan editables y no se vuelven a sobrescribir.
-    if(localStorage.getItem("sethoria-demo-build")!=="a65"){
+    if(localStorage.getItem("sethoria-demo-build")!=="a66"){
       for(const seed of (window.SETHORIA_DEMO.seedEntities||[])){
         if(String(seed.id||"").startsWith("demo-")) await putEntity(seed);
       }
-      localStorage.setItem("sethoria-demo-build","a65");
+      localStorage.setItem("sethoria-demo-build","a66");
     }
     return getAll();
   }
@@ -1288,12 +1288,1301 @@
     wireDirectEditors(e);wireCharacterTab(e);history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
   }
 
+  // ============================================================
+  // LUGARES — A6.6
+  // Una sola arquitectura para cualquier escala. La clasificación
+  // no cambia la plantilla: solo servirá más adelante para habilitar
+  // o limitar funciones cuando corresponda.
+  // ============================================================
+
+  const PLACE_TABS = [
+    ["description","Descripción","info"],
+    ["maps","Mapas","lugares"],
+    ["history","Historia","historia-real"],
+    ["participation","Participación","arcos"],
+    ["gallery","Galería","objetos"],
+    ["research","Investigación","fuentes"]
+  ];
+
+  let activePlaceMapId="";
+  let selectedPlaceMapElementId="";
+  let placeMapTool=null;
+  const placeMapViews=new Map();
+
+  function placeData(e){
+    e.place ||= {};
+    const p=e.place;
+    p.info ||= {};
+    p.description ||= {};
+    p.description.media ||= [];
+    p.maps ||= [];
+    p.history ||= [];
+    p.gallery ||= [];
+    p.research ||= {};
+    return p;
+  }
+
+  function placeInfoRows(e){
+    placeData(e);
+    return [
+      {title:"Información",rows:[
+        ["También conocido como","place.info.aliases",true],
+        ["Tipo","place.info.type",false],
+        ["Lugar superior","place.info.parent",false],
+        ["Ubicación","place.info.location",false],
+        ["Época / procedencia","place.info.originPeriod",false],
+        ["Estado","place.info.state",false]
+      ]},
+      {title:"Datos espaciales",rows:[
+        ["Dimensiones","place.info.dimensions",false],
+        ["Área","place.info.area",false],
+        ["Altitud","place.info.altitude",false],
+        ["Coordenadas","place.info.coordinates",false]
+      ]}
+    ];
+  }
+
+  function renderPlaceInfobox(e){
+    const image=getImage(e);
+    return `<aside class="character-infobox place-infobox">
+      <div class="character-portrait-shell">
+        <div class="character-portrait place-cover">
+          ${image?`<img src="${esc(image)}" alt="">`:`<div class="character-portrait-placeholder">${icon("lugares")}</div>`}
+        </div>
+        <div class="portrait-ornament"></div>
+      </div>
+      ${placeInfoRows(e).map(group=>`<section class="infobox-section">
+        <h3>${esc(group.title)}</h3><dl>
+          ${group.rows.map(([label,path,lines])=>`<div class="infobox-row"><dt>${esc(label)}</dt><dd>${renderEditable(getPath(e,path),path,e,{lines,cls:"infobox-direct-edit"})}</dd></div>`).join("")}
+        </dl>
+      </section>`).join("")}
+    </aside>`;
+  }
+
+  function mapUid(prefix="map"){
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+  }
+
+  function defaultMapSettings(){
+    return {
+      rotation:0,
+      northAngle:0,
+      baseOpacity:1,
+      coordinates:{
+        mode:"relative",
+        geographic:false,
+        originX:0,
+        originY:0,
+        xDirection:"right",
+        yDirection:"down"
+      },
+      calibration:{
+        method:"pixel",
+        unit:"m",
+        pixelValue:"",
+        totalWidth:"",
+        totalHeight:"",
+        pointA:null,
+        pointB:null,
+        pointDistance:"",
+        scaleX:"",
+        scaleY:"",
+        controlPairs:[]
+      },
+      units:{distance:"m",area:"m²",speed:"km/h",time:"h",altitude:"m"},
+      precision:{mode:"Aproximada",tolerance:"",toleranceType:"%"},
+      time:{enabled:false,reference:""},
+      visual:{
+        markerSize:12,
+        labelSize:12,
+        hideLabelsZoom:0.7,
+        cluster:false,
+        lineWidth:2,
+        zoneOpacity:0.22,
+        zoomMin:0.5,
+        zoomMax:4
+      },
+      routeDefaults:{
+        method:"direct",
+        smoothness:0,
+        pointDensity:8,
+        tolerance:0,
+        respectObstacles:false,
+        restrictedLayerIds:[],
+        preferredLayerIds:[],
+        defaultSpeed:"",
+        defaultTransport:""
+      }
+    };
+  }
+
+  function newPlaceMap(title="Nuevo mapa"){
+    return {
+      id:mapUid("map"),
+      title,
+      image:null,
+      settings:defaultMapSettings(),
+      levels:[],
+      layers:[],
+      elements:[],
+      generator:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}
+    };
+  }
+
+  function normalizePlaceMap(m){
+    m.settings ||= defaultMapSettings();
+    const d=defaultMapSettings();
+    m.settings.coordinates={...d.coordinates,...(m.settings.coordinates||{})};
+    m.settings.calibration={...d.calibration,...(m.settings.calibration||{})};
+    m.settings.calibration.controlPairs ||= [];
+    m.settings.units={...d.units,...(m.settings.units||{})};
+    m.settings.precision={...d.precision,...(m.settings.precision||{})};
+    m.settings.time={...d.time,...(m.settings.time||{})};
+    m.settings.visual={...d.visual,...(m.settings.visual||{})};
+    m.settings.routeDefaults={...d.routeDefaults,...(m.settings.routeDefaults||{})};
+    m.settings.routeDefaults.restrictedLayerIds ||= [];
+    m.settings.routeDefaults.preferredLayerIds ||= [];
+    m.levels ||= [];
+    m.layers ||= [];
+    m.elements ||= [];
+    m.generator ||= {originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"};
+    m.generator.waypointIds ||= [];
+    m.generator.avoidZoneIds ||= [];
+    m.generator.preferredLineIds ||= [];
+    return m;
+  }
+
+  async function chooseMapImage(){
+    const file=await new Promise(resolve=>{
+      const input=document.createElement("input");
+      input.type="file";
+      input.accept="image/*,.gif";
+      input.onchange=()=>resolve(input.files?.[0]||null);
+      input.click();
+    });
+    if(!file) return null;
+    const kind=mediaKind(file);
+    if(kind!=="image"){alert("La base del mapa debe ser una imagen o GIF.");return null}
+    const src=await readFileDataURL(file);
+    const dims=await readMediaDimensions(src,"image");
+    return {src,name:file.name,width:dims.width||0,height:dims.height||0};
+  }
+
+  function activePlaceMap(e){
+    const p=placeData(e);
+    if(!p.maps.length) return null;
+    let m=p.maps.find(x=>x.id===activePlaceMapId);
+    if(!m){m=p.maps[0];activePlaceMapId=m.id}
+    return normalizePlaceMap(m);
+  }
+
+  function placeMapElement(m,id=selectedPlaceMapElementId){
+    return m?.elements?.find(x=>x.id===id)||null;
+  }
+
+  function newMapElement(kind,nodes=[]){
+    const common={
+      id:mapUid(kind),
+      name:kind==="point"?"Nuevo punto":kind==="line"?"Nueva línea":kind==="zone"?"Nueva zona":"Nueva ruta",
+      kind,
+      category:kind==="route"?"rutas":"",
+      layerIds:[],
+      levelIds:[],
+      targetId:"",
+      note:"",
+      dateFrom:"",
+      dateTo:"",
+      visible:true,
+      order:0,
+      style:{color:"",opacity:"",lineWidth:"",dash:""},
+      media:[]
+    };
+    if(kind==="point") return {...common,x:nodes[0]?.x??50,y:nodes[0]?.y??50,lat:"",lon:"",altitude:"",symbol:"",size:"",rotation:0,label:true,labelPosition:"top",labelOffsetX:0,labelOffsetY:0,radius:"",direction:""};
+    if(kind==="line") return {...common,nodes,closed:false,strokeType:"solid",direction:"none",arrows:false,realWidth:"",smoothing:0,nodeElevations:[]};
+    if(kind==="zone") return {...common,nodes,holes:[],parts:[],fillOpacity:"",borderWidth:"",labelPoint:null,elevation:"",height:"",containerId:""};
+    return {...common,nodes,nodeLevels:nodes.map(()=>""),originPointId:"",destinationPointId:"",waypointPointIds:[],circular:false,direction:"forward",segments:[],speedMode:"fixed",fixedSpeed:"",speedMin:"",speedMax:"",speedApprox:false,durationManual:"",departure:"",arrival:"",uncertainty:"",manualDistance:"",proposal:false,generation:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}};
+  }
+
+  const DIST_TO_M={mm:.001,cm:.01,m:1,km:1000,mi:1609.344,ft:.3048,nmi:1852};
+  const SPEED_TO_MS={"m/s":1,"km/h":1000/3600,mph:1609.344/3600,kn:1852/3600,nudos:1852/3600};
+  const TIME_TO_S={s:1,min:60,h:3600,d:86400,días:86400};
+
+  function distToM(value,unit){return (Number(value)||0)*(DIST_TO_M[unit]||1)}
+  function mToDist(value,unit){return value/(DIST_TO_M[unit]||1)}
+  function speedToMs(value,unit){return (Number(value)||0)*(SPEED_TO_MS[unit]||1)}
+  function secondsToTime(value,unit){return value/(TIME_TO_S[unit]||3600)}
+  function timeToSeconds(value,unit){return (Number(value)||0)*(TIME_TO_S[unit]||3600)}
+
+  function mapScaleXY(m){
+    const s=m.settings.calibration||{};
+    const imgW=Math.max(1,Number(m.image?.width)||1000);
+    const imgH=Math.max(1,Number(m.image?.height)||1000);
+    const unit=s.unit||m.settings.units.distance||"m";
+    let sx=0,sy=0;
+    if(s.method==="pixel"){
+      sx=sy=distToM(s.pixelValue,unit);
+    }else if(s.method==="total"){
+      if(Number(s.totalWidth)>0) sx=distToM(s.totalWidth,unit)/imgW;
+      if(Number(s.totalHeight)>0) sy=distToM(s.totalHeight,unit)/imgH;
+      if(!sx&&sy) sx=sy;if(!sy&&sx) sy=sx;
+    }else if(s.method==="twoPoints"){
+      const a=s.pointA,b=s.pointB;
+      if(a&&b&&Number(s.pointDistance)>0){
+        const dx=(b.x-a.x)/100*imgW,dy=(b.y-a.y)/100*imgH;
+        const px=Math.hypot(dx,dy);
+        if(px>0) sx=sy=distToM(s.pointDistance,unit)/px;
+      }
+    }else if(s.method==="axis"){
+      sx=distToM(s.scaleX,unit);sy=distToM(s.scaleY,unit);
+      if(!sx&&sy)sx=sy;if(!sy&&sx)sy=sx;
+    }else if(s.method==="multi"){
+      const values=[];
+      for(const pair of toArray(s.controlPairs)){
+        if(!Number(pair.distance)) continue;
+        const dx=(Number(pair.x2)-Number(pair.x1))/100*imgW;
+        const dy=(Number(pair.y2)-Number(pair.y1))/100*imgH;
+        const px=Math.hypot(dx,dy);
+        if(px>0) values.push(distToM(pair.distance,unit)/px);
+      }
+      if(values.length) sx=sy=values.reduce((a,b)=>a+b,0)/values.length;
+    }
+    return {sx:sx||0,sy:sy||sx||0};
+  }
+
+  function segmentMeters(m,a,b){
+    const {sx,sy}=mapScaleXY(m);if(!sx||!sy)return 0;
+    const w=Math.max(1,Number(m.image?.width)||1000),h=Math.max(1,Number(m.image?.height)||1000);
+    const dx=(Number(b.x)-Number(a.x))/100*w*sx;
+    const dy=(Number(b.y)-Number(a.y))/100*h*sy;
+    return Math.hypot(dx,dy);
+  }
+
+  function polylineMeters(m,nodes){
+    let total=0;for(let i=1;i<toArray(nodes).length;i++) total+=segmentMeters(m,nodes[i-1],nodes[i]);return total;
+  }
+
+  function polygonAreaMeters2(m,nodes){
+    const pts=toArray(nodes);if(pts.length<3)return 0;
+    const {sx,sy}=mapScaleXY(m);if(!sx||!sy)return 0;
+    const w=Math.max(1,Number(m.image?.width)||1000),h=Math.max(1,Number(m.image?.height)||1000);
+    let sum=0;
+    for(let i=0;i<pts.length;i++){
+      const a=pts[i],b=pts[(i+1)%pts.length];
+      const ax=Number(a.x)/100*w*sx,ay=Number(a.y)/100*h*sy;
+      const bx=Number(b.x)/100*w*sx,by=Number(b.y)/100*h*sy;
+      sum+=ax*by-bx*ay;
+    }
+    return Math.abs(sum)/2;
+  }
+
+  function zoneAreaMeters2(m,z){
+    let area=polygonAreaMeters2(m,z.nodes);
+    for(const h of toArray(z.holes)) area-=polygonAreaMeters2(m,h);
+    for(const part of toArray(z.parts)) area+=polygonAreaMeters2(m,part);
+    return Math.max(0,area);
+  }
+
+  function zonePerimeterMeters(m,z){
+    const ring=n=>n?.length>1?polylineMeters(m,[...n,n[0]]):0;
+    return ring(z.nodes)+toArray(z.holes).reduce((a,h)=>a+ring(h),0)+toArray(z.parts).reduce((a,p)=>a+ring(p),0);
+  }
+
+  function pointInPolygon(point,poly){
+    const p=toArray(poly);if(p.length<3)return false;
+    let inside=false;
+    for(let i=0,j=p.length-1;i<p.length;j=i++){
+      const xi=Number(p[i].x),yi=Number(p[i].y),xj=Number(p[j].x),yj=Number(p[j].y);
+      const intersect=((yi>point.y)!==(yj>point.y)) && (point.x<(xj-xi)*(point.y-yi)/((yj-yi)||1e-9)+xi);
+      if(intersect) inside=!inside;
+    }
+    return inside;
+  }
+
+  function pointInZone(point,z){
+    const inMain=pointInPolygon(point,z.nodes)||toArray(z.parts).some(p=>pointInPolygon(point,p));
+    if(!inMain)return false;
+    return !toArray(z.holes).some(h=>pointInPolygon(point,h));
+  }
+
+  function segmentsIntersect(a,b,c,d){
+    const orient=(p,q,r)=>Math.sign((q.y-p.y)*(r.x-q.x)-(q.x-p.x)*(r.y-q.y));
+    const o1=orient(a,b,c),o2=orient(a,b,d),o3=orient(c,d,a),o4=orient(c,d,b);
+    return o1!==o2&&o3!==o4;
+  }
+
+  function polylineCrossesZone(nodes,z){
+    const rings=[z.nodes,...toArray(z.parts),...toArray(z.holes)];
+    if(toArray(nodes).some(p=>pointInZone(p,z))) return true;
+    for(let i=1;i<toArray(nodes).length;i++){
+      for(const ring of rings){
+        for(let j=0;j<toArray(ring).length;j++){
+          const a=ring[j],b=ring[(j+1)%ring.length];
+          if(segmentsIntersect(nodes[i-1],nodes[i],a,b)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function approxMetersInsideZone(m,nodes,z){
+    let inside=0,total=0;
+    for(let i=1;i<toArray(nodes).length;i++){
+      const a=nodes[i-1],b=nodes[i],seg=segmentMeters(m,a,b);if(!seg)continue;
+      total+=seg;
+      const samples=24;let hit=0;
+      for(let s=0;s<samples;s++){
+        const t=(s+.5)/samples;
+        const p={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};
+        if(pointInZone(p,z))hit++;
+      }
+      inside+=seg*(hit/samples);
+    }
+    return {inside,total,ratio:total?inside/total:0};
+  }
+
+  function fmtNumber(n,d=2){return Number.isFinite(n)?Number(n).toLocaleString("es-MX",{maximumFractionDigits:d}):"—"}
+  function formatDistance(meters,m){
+    if(!meters)return "—";const unit=m.settings.units.distance||"m";return `${fmtNumber(mToDist(meters,unit))} ${unit}`;
+  }
+  function formatArea(m2,m){
+    if(!m2)return "—";const unit=m.settings.units.area||"m²";
+    const divisor=unit==="km²"?1e6:unit==="ha"?10000:unit==="ft²"?0.092903:1;
+    return `${fmtNumber(m2/divisor)} ${unit}`;
+  }
+
+  function routeCalculatedSeconds(m,r){
+    const timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
+    const nodes=toArray(r.nodes);if(nodes.length<2)return 0;
+    if(r.speedMode==="knownTime"&&Number(r.durationManual)>0)return timeToSeconds(r.durationManual,timeUnit);
+    if(r.speedMode==="interval"&&Number(r.speedMin)>0&&Number(r.speedMax)>0&&!toArray(r.segments).length){
+      const avgSpeed=(Number(r.speedMin)+Number(r.speedMax))/2,ms=speedToMs(avgSpeed,speedUnit);
+      return ms>0?polylineMeters(m,nodes)/ms:0;
+    }
+    if(toArray(r.segments).length){
+      let total=0;
+      for(const seg of r.segments){
+        if(Number(seg.durationManual)>0){total+=timeToSeconds(seg.durationManual,timeUnit);continue}
+        const from=Math.max(0,Math.min(nodes.length-2,Number(seg.fromIndex)||0));
+        const to=Math.max(from+1,Math.min(nodes.length-1,Number(seg.toIndex)||nodes.length-1));
+        const dist=polylineMeters(m,nodes.slice(from,to+1));
+        const speed=Number(seg.speed)||Number(r.fixedSpeed)||Number(m.settings.routeDefaults.defaultSpeed)||0;
+        const factor=Number(seg.factor)||1;
+        const ms=speedToMs(speed*factor,speedUnit);
+        if(ms>0) total+=dist/ms;
+        total+=timeToSeconds(seg.pauses,timeUnit);
+      }
+      return total;
+    }
+    const speed=Number(r.fixedSpeed)||Number(m.settings.routeDefaults.defaultSpeed)||0;
+    const ms=speedToMs(speed,speedUnit);return ms>0?polylineMeters(m,nodes)/ms:0;
+  }
+
+  function routeStats(m,r){
+    const calcNodes=routeNodesForCalc(r);
+    const meters=polylineMeters(m,calcNodes);
+    const seconds=routeCalculatedSeconds(m,{...r,nodes:calcNodes});
+    const avg=seconds?meters/seconds:0;
+    const speedUnit=m.settings.units.speed||"km/h";
+    const avgUnit=avg/(SPEED_TO_MS[speedUnit]||1);
+    let secondsMin=0,secondsMax=0;
+    if(r.speedMode==="interval"&&Number(r.speedMin)>0&&Number(r.speedMax)>0){
+      const slow=speedToMs(Math.min(Number(r.speedMin),Number(r.speedMax)),speedUnit),fast=speedToMs(Math.max(Number(r.speedMin),Number(r.speedMax)),speedUnit);
+      if(fast>0)secondsMin=meters/fast;if(slow>0)secondsMax=meters/slow;
+    }
+    let calculatedArrival="";
+    const dep=Date.parse(r.departure||"");
+    if(Number.isFinite(dep)&&seconds>0)calculatedArrival=new Date(dep+seconds*1000).toISOString();
+    const zones=m.elements.filter(x=>x.kind==="zone"&&polylineCrossesZone(calcNodes,x)).map(z=>{
+      const part=approxMetersInsideZone(m,calcNodes,z);
+      return {name:z.name||"Zona",meters:part.inside,ratio:part.ratio};
+    });
+    return {meters,seconds,secondsMin,secondsMax,avgUnit,zones,calculatedArrival};
+  }
+
+  function mapElementVisible(m,el){
+    if(el.visible===false)return false;
+    if(el.layerIds?.length){
+      const visibleLayers=new Set(m.layers.filter(l=>l.visible!==false).map(l=>l.id));
+      if(!el.layerIds.some(id=>visibleLayers.has(id)))return false;
+    }
+    if(el.levelIds?.length){
+      const visibleLevels=new Set(m.levels.filter(l=>l.visible!==false).map(l=>l.id));
+      if(!el.levelIds.some(id=>visibleLevels.has(id)))return false;
+    }
+    const time=m.settings.time||{};
+    if(time.enabled&&time.reference){
+      const ref=Date.parse(time.reference);
+      if(Number.isFinite(ref)){
+        const from=Date.parse(el.dateFrom||"");const to=Date.parse(el.dateTo||"");
+        if(Number.isFinite(from)&&ref<from)return false;
+        if(Number.isFinite(to)&&ref>to)return false;
+      }
+    }
+    return true;
+  }
+
+  function layerStyleFor(m,el){
+    const layer=toArray(el.layerIds).map(id=>m.layers.find(x=>x.id===id)).find(Boolean);
+    return layer?{...(layer.style||{}),opacity:layer.opacity}:{};
+  }
+
+  function mapElementStyle(m,el){
+    const layer=layerStyleFor(m,el),own=el.style||{};
+    return {
+      color:own.color||layer.color||"#d4b27a",
+      opacity:own.opacity===""||own.opacity==null?(layer.opacity??1):Number(own.opacity),
+      width:Number(own.lineWidth)||Number(layer.lineWidth)||Number(m.settings.visual.lineWidth)||2,
+      dash:own.dash||layer.dash||"",
+      symbol:layer.symbol||""
+    };
+  }
+
+  function svgPoints(nodes){return toArray(nodes).map(p=>`${Number(p.x)||0},${Number(p.y)||0}`).join(" ")}
+
+  function renderMapLabels(m,el,selected){
+    if(el.kind==="point"&&el.label===false)return "";
+    const view=currentMapView(m);
+    if(view.zoom<Number(m.settings.visual.hideLabelsZoom||0))return "";
+    const name=el.name||"";if(!name)return "";
+    let x=50,y=50;
+    if(el.kind==="point"){x=Number(el.x)||0;y=Number(el.y)||0}
+    else if(el.kind==="zone"&&el.labelPoint){x=Number(el.labelPoint.x)||50;y=Number(el.labelPoint.y)||50}
+    else if(el.nodes?.length){x=el.nodes.reduce((a,p)=>a+Number(p.x),0)/el.nodes.length;y=el.nodes.reduce((a,p)=>a+Number(p.y),0)/el.nodes.length}
+    let px=Number(el.labelOffsetX)||0,py=Number(el.labelOffsetY)||0;
+    if(el.kind==="point"){
+      const pos=el.labelPosition||"top";
+      if(pos==="top")py-=2.1;else if(pos==="bottom")py+=3.1;else if(pos==="left")px-=3;else if(pos==="right")px+=3;
+    }
+    const fs=Math.max(1.2,(Number(m.settings.visual.labelSize)||12)*.15);
+    return `<text class="map-element-label ${selected?"selected":""}" style="font-size:${fs}px" x="${x+px}" y="${y+py}" data-map-element="${esc(el.id)}">${esc(name)}</text>`;
+  }
+
+  function realRadiusPercent(m,value){
+    const meters=distToM(value,m.settings.units.distance||"m");
+    const {sx}=mapScaleXY(m),w=Math.max(1,Number(m.image?.width)||1000);
+    return sx>0?meters/(w*sx)*100:0;
+  }
+
+  function routeNodesForCalc(r){
+    const nodes=toArray(r.nodes).map(p=>({...p}));
+    if(r.circular&&nodes.length>1)nodes.push({...nodes[0]});
+    return nodes;
+  }
+
+  function renderMapElementSvg(m,el){
+    if(!mapElementVisible(m,el))return "";
+    const s=mapElementStyle(m,el),selected=el.id===selectedPlaceMapElementId;
+    let dash=s.dash||"";
+    if(el.kind==="line"&&!dash){if(el.strokeType==="dashed")dash="2 1.3";else if(el.strokeType==="dotted")dash=".35 1"}
+    const dashAttr=dash?`stroke-dasharray="${esc(dash)}"`:"";
+    const common=`data-map-element="${esc(el.id)}" opacity="${s.opacity}"`;
+    let shape="";
+    if(el.kind==="point"){
+      const size=Number(el.size)||Number(m.settings.visual.markerSize)||12;
+      const r=Math.max(.45,Math.min(3.2,size*.075));
+      const radius=Number(el.radius)>0?realRadiusPercent(m,el.radius):0;
+      const dir=Number(el.direction);
+      const directionLine=Number.isFinite(dir)&&el.direction!==""?(()=>{const a=(dir-90)*Math.PI/180,len=r*3.4;return `<line x1="${el.x}" y1="${el.y}" x2="${Number(el.x)+Math.cos(a)*len}" y2="${Number(el.y)+Math.sin(a)*len}" stroke="${esc(s.color)}" stroke-width=".22" marker-end="url(#mapArrow)"/>`})():"";
+      const radiusShape=radius>0?`<circle cx="${el.x}" cy="${el.y}" r="${radius}" fill="${esc(s.color)}" fill-opacity=".08" stroke="${esc(s.color)}" stroke-width=".12" stroke-dasharray=".6 .5"/>`:"";
+      shape=`<g ${common} class="map-shape point-shape ${selected?"selected":""}" transform="rotate(${Number(el.rotation)||0} ${Number(el.x)||0} ${Number(el.y)||0})">${radiusShape}${directionLine}<circle cx="${Number(el.x)||0}" cy="${Number(el.y)||0}" r="${r}" fill="${esc(s.color)}" stroke="rgba(0,0,0,.55)" stroke-width=".3"/><text class="map-point-symbol" x="${Number(el.x)||0}" y="${(Number(el.y)||0)+.15}">${esc(el.symbol||s.symbol||"•")}</text></g>`;
+    }else if(el.kind==="line"){
+      let nodes=toArray(el.nodes);if(Number(el.smoothing)>0)nodes=smoothPolyline(nodes,Number(el.smoothing));
+      if(el.closed&&nodes.length>2)nodes=[...nodes,nodes[0]];
+      const arrows=el.arrows||el.direction!=="none";
+      let markers="";if(arrows){if(el.direction==="backward"||el.direction==="both")markers+=' marker-start="url(#mapArrow)"';if(el.direction==="forward"||el.direction==="both")markers+=' marker-end="url(#mapArrow)"'}
+      if(nodes.length>1)shape=`<polyline ${common} class="map-shape ${selected?"selected":""}" points="${svgPoints(nodes)}" fill="${el.closed?`${esc(s.color)}22`:"none"}" stroke="${esc(s.color)}" stroke-width="${Math.max(.18,s.width*.18)}" ${dashAttr}${markers}/>`;
+    }else if(el.kind==="zone"){
+      const renderRing=(nodes)=>toArray(nodes).length>2?`<polygon ${common} class="map-shape zone-shape ${selected?"selected":""}" points="${svgPoints(nodes)}" fill="${esc(s.color)}" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):Number(m.settings.visual.zoneOpacity)||.22}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`:"";
+      shape=renderRing(el.nodes)+toArray(el.parts).map(renderRing).join("")+toArray(el.holes).map(h=>`<polygon class="map-zone-hole" points="${svgPoints(h)}" fill="rgba(10,10,14,.72)" stroke="${esc(s.color)}" stroke-width=".12"/>`).join("");
+    }else if(el.kind==="route"){
+      let nodes=routeNodesForCalc(el);if(nodes.length>1){const markers=el.direction==="backward"?' marker-start="url(#mapArrow)"':el.direction==="both"?' marker-start="url(#mapArrow)" marker-end="url(#mapArrow)"':' marker-end="url(#mapArrow)"';shape=`<polyline ${common} class="map-shape route-shape ${selected?"selected":""} ${el.proposal?"proposal":""}" points="${svgPoints(nodes)}" fill="none" stroke="${esc(s.color)}" stroke-width="${Math.max(.22,s.width*.2)}" ${el.proposal?'stroke-dasharray="1.2 1"':dashAttr}${markers}/>`}
+    }
+    const handles=selected?renderMapHandles(el):"";
+    return `${shape}${renderMapLabels(m,el,selected)}${handles}`;
+  }
+
+  function renderMapHandles(el){
+    if(el.kind==="point") return `<circle class="map-node-handle" cx="${Number(el.x)||0}" cy="${Number(el.y)||0}" r=".75" data-node-index="0" data-node-part="point"/>`;
+    const handles=toArray(el.nodes).map((p,i)=>`<circle class="map-node-handle" cx="${Number(p.x)||0}" cy="${Number(p.y)||0}" r=".68" data-node-index="${i}" data-node-part="nodes"/>`).join("");
+    if(el.kind!=="zone")return handles;
+    return handles+toArray(el.parts).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle part-handle" cx="${p.x}" cy="${p.y}" r=".6" data-node-index="${i}" data-node-part="parts" data-part-index="${pi}"/>`).join("")).join("")+toArray(el.holes).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle hole-handle" cx="${p.x}" cy="${p.y}" r=".6" data-node-index="${i}" data-node-part="holes" data-part-index="${pi}"/>`).join("")).join("");
+  }
+
+  function currentMapView(m){
+    if(!placeMapViews.has(m.id))placeMapViews.set(m.id,{zoom:1,panX:0,panY:0});
+    return placeMapViews.get(m.id);
+  }
+
+  function renderMapElementsSvg(m){
+    const ordered=m.elements.slice().sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0));
+    const view=currentMapView(m);
+    if(!m.settings.visual.cluster||view.zoom>=1)return ordered.map(el=>renderMapElementSvg(m,el)).join("");
+    const points=ordered.filter(el=>el.kind==="point"&&mapElementVisible(m,el)&&el.id!==selectedPlaceMapElementId);
+    const others=ordered.filter(el=>el.kind!=="point"||el.id===selectedPlaceMapElementId);
+    const groups=[];
+    for(const p of points){let g=groups.find(g=>Math.hypot(g.x-p.x,g.y-p.y)<4.5);if(!g){g={x:Number(p.x),y:Number(p.y),items:[]};groups.push(g)}g.items.push(p);g.x=g.items.reduce((a,x)=>a+Number(x.x),0)/g.items.length;g.y=g.items.reduce((a,x)=>a+Number(x.y),0)/g.items.length}
+    const clusters=groups.map(g=>g.items.length===1?renderMapElementSvg(m,g.items[0]):`<g class="map-cluster"><circle cx="${g.x}" cy="${g.y}" r="2.2"/><text x="${g.x}" y="${g.y+.25}">${g.items.length}</text></g>`).join("");
+    return others.map(el=>renderMapElementSvg(m,el)).join("")+clusters;
+  }
+
+  function renderMapStage(m){
+    const img=m.image;
+    if(!img?.src){
+      return `<div class="place-map-empty"><div>${icon("lugares")}</div><p>Sin imagen base.</p><button class="map-action" data-map-load-image>＋ Cargar imagen base</button></div>`;
+    }
+    const ratio=(Number(img.width)>0&&Number(img.height)>0)?`${img.width}/${img.height}`:"16/9";
+    const rot=Number(m.settings.rotation)||0;
+    const els=renderMapElementsSvg(m);
+    const view=currentMapView(m);
+    return `<div class="place-map-viewport" data-map-viewport>
+      <div class="place-map-canvas" style="aspect-ratio:${ratio};transform:translate(${view.panX}px,${view.panY}px) scale(${view.zoom})">
+        <svg class="place-map-svg" data-map-stage viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs><marker id="mapArrow" markerWidth="4" markerHeight="4" refX="3.2" refY="2" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/></marker></defs>
+          <g transform="rotate(${rot} 50 50)">
+            <image href="${esc(img.src)}" x="0" y="0" width="100" height="100" preserveAspectRatio="none" opacity="${Number(m.settings.baseOpacity)??1}"/>
+            <g class="map-elements-layer">${els}</g>
+            ${placeMapTool?.mapId===m.id&&toArray(placeMapTool.nodes).length?renderToolPreview(m):""}
+          </g>
+          <g class="map-north" transform="translate(93 8) rotate(${Number(m.settings.northAngle)||0})"><path d="M0 4 L0 -4"/><path d="M0 -4 L-1.2 -1.5 L1.2 -1.5 Z"/><text x="0" y="-5">N</text></g>
+        </svg>
+      </div>
+    </div>`;
+  }
+
+  function renderToolPreview(m){
+    const t=placeMapTool,nodes=toArray(t.nodes);if(!nodes.length)return "";
+    if(t.mode==="draw-line"||t.mode==="draw-route"||t.mode==="append-nodes"||t.mode==="zone-part"||t.mode==="zone-hole") return `<polyline class="map-tool-preview" points="${svgPoints(nodes)}" fill="none"/>`;
+    if(t.mode==="draw-zone") return `<polygon class="map-tool-preview" points="${svgPoints(nodes)}"/>`;
+    return "";
+  }
+
+  function inverseRotatedPoint(x,y,deg){
+    const a=-deg*Math.PI/180,cx=50,cy=50,dx=x-cx,dy=y-cy;
+    return {x:cx+dx*Math.cos(a)-dy*Math.sin(a),y:cy+dx*Math.sin(a)+dy*Math.cos(a)};
+  }
+
+  function eventMapPoint(svg,ev,m){
+    const r=svg.getBoundingClientRect();
+    let x=(ev.clientX-r.left)/r.width*100,y=(ev.clientY-r.top)/r.height*100;
+    const p=inverseRotatedPoint(x,y,Number(m.settings.rotation)||0);
+    return {x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y))};
+  }
+
+  function renderPlaceDescription(e){
+    const p=placeData(e);
+    return `<div class="character-content-stack">
+      <section class="character-section media-aware-block place-description-free">
+        <div class="rich-content-flow">
+          ${renderEmbeddedMedia(p.description.media,"place.description.media",e)}
+          ${renderEditable(e.summary||"","summary",e,{cls:"character-prose editable-long-text",placeholder:"—"})}
+        </div>
+        <button class="inline-add-media" data-place-add-media="place.description.media">＋ Multimedia</button>
+      </section>
+    </div>`;
+  }
+
+  function renderPlaceHistory(e){
+    const p=placeData(e);
+    return `<div class="character-content-stack">
+      ${p.history.map((s,i)=>richSection(e,{title:s.title||"",titlePath:`place.history.${i}.title`,path:`place.history.${i}.body`,mediaPath:`place.history.${i}.media`,removeAction:`data-place-remove-history="${i}"`})).join("")}
+      <button class="section-add" data-place-add-history>＋ Apartado</button>
+    </div>`;
+  }
+
+  function placeParticipationCategories(){
+    return [["personajes","Personajes"],["eventos","Eventos"],["grupos","Grupos"],["batallas","Batallas"],["rutas","Rutas"],["barcos","Barcos"],["arcos","Arcos"]];
+  }
+
+  function findPlaceParticipation(e){
+    const needles=entityTerms(e).map(x=>x.toLocaleLowerCase("es")).filter(x=>x.length>=3);
+    return placeParticipationCategories().map(([category,label])=>{
+      const items=entities.filter(other=>{
+        if(other.id===e.id||other.category!==category)return false;
+        const raw=JSON.stringify(other).toLocaleLowerCase("es");
+        return raw.includes(e.id.toLocaleLowerCase("es"))||(e.masterTag&&raw.includes(String(e.masterTag).toLocaleLowerCase("es")))||needles.some(n=>raw.includes(n));
+      });
+      return {category,label,items};
+    }).filter(g=>g.items.length);
+  }
+
+  function renderPlaceParticipation(e){
+    const groups=findPlaceParticipation(e);
+    if(!groups.length)return `<section class="character-section"><div class="empty">Todavía no hay referencias suficientes.</div></section>`;
+    return `<div class="character-content-stack">${groups.map(g=>`<section class="character-section"><h2>${esc(g.label)}</h2><div class="participation-grid">${g.items.map(target=>`<button class="participation-card" data-open-related="${target.id}"><span class="participation-icon">${icon(target.category)}</span><span><strong>${esc(target.title)}</strong></span></button>`).join("")}</div></section>`).join("")}</div>`;
+  }
+
+  function renderPlaceGallery(e){
+    const p=placeData(e);
+    return `<section class="character-section gallery-section"><div class="section-title-row"><h2>Galería</h2><button class="section-add compact" data-place-add-gallery>＋ Multimedia</button></div>
+      ${p.gallery.length?`<div class="character-gallery-grid">${p.gallery.map((item,i)=>`<article class="character-gallery-card">${renderMediaElement(item)}${renderEditable(item.caption||"",`place.gallery.${i}.caption`,e,{cls:"gallery-caption direct-gallery-caption",placeholder:"Pie opcional"})}<button class="gallery-remove" data-place-remove-gallery="${i}">×</button></article>`).join("")}</div>`:`<div class="empty">Sin multimedia.</div>`}
+    </section>`;
+  }
+
+  function renderPlaceResearch(e){
+    const r=placeData(e).research;
+    r.kind ||= "Inventado";r.workStatus ||= "Nuevo";
+    if(Array.isArray(r.sources))r.sources=r.sources.join("\n");if(Array.isArray(r.pending))r.pending=r.pending.join("\n");if(Array.isArray(r.notes))r.notes=r.notes.join("\n");
+    return `<div class="character-content-stack">
+      <section class="character-section research-choices"><div><h2>Lugar</h2><select data-place-select-path="place.research.kind"><option ${r.kind==="Real"?"selected":""}>Real</option><option ${r.kind==="Inventado"?"selected":""}>Inventado</option><option ${r.kind==="Adaptado"?"selected":""}>Adaptado</option></select></div><div><h2>Estado de desarrollo</h2><select data-place-select-path="place.research.workStatus"><option ${r.workStatus==="Nuevo"?"selected":""}>Nuevo</option><option ${r.workStatus==="En desarrollo"?"selected":""}>En desarrollo</option><option ${r.workStatus==="Final"?"selected":""}>Final</option></select></div></section>
+      <section class="character-section"><h2>Fuentes</h2>${renderEditable(r.sources||"","place.research.sources",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
+      <section class="character-section"><h2>Pendientes</h2>${renderEditable(r.pending||"","place.research.pending",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
+      <section class="character-section"><h2>Notas</h2>${renderEditable(r.notes||"","place.research.notes",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
+    </div>`;
+  }
+
+  function mapInput(path,value,{type="text",min="",max="",step="",cls="",placeholder=""}={}){
+    return `<input class="map-field ${cls}" type="${type}" data-map-path="${esc(path)}" value="${esc(value??"")}" ${min!==""?`min="${min}"`:""} ${max!==""?`max="${max}"`:""} ${step!==""?`step="${step}"`:""} placeholder="${esc(placeholder)}">`;
+  }
+  function mapCheckbox(path,value,label=""){
+    return `<label class="map-check"><input type="checkbox" data-map-path="${esc(path)}" data-map-type="bool" ${value!==false&&value?"checked":""}><span>${esc(label)}</span></label>`;
+  }
+  function mapSelect(path,value,options){
+    return `<select class="map-field" data-map-path="${esc(path)}">${options.map(o=>{const v=Array.isArray(o)?o[0]:o,l=Array.isArray(o)?o[1]:o;return `<option value="${esc(v)}" ${String(value)===String(v)?"selected":""}>${esc(l)}</option>`}).join("")}</select>`;
+  }
+  function settingRow(label,control,wide=false){return `<label class="map-setting-row ${wide?"wide":""}"><span>${esc(label)}</span>${control}</label>`}
+
+  function renderCalibrationSettings(m){
+    const c=m.settings.calibration;
+    return `<div class="map-settings-grid">
+      ${settingRow("Método",mapSelect("settings.calibration.method",c.method,[["pixel","Valor por píxel"],["total","Dimensión total"],["twoPoints","Dos puntos"],["axis","X/Y independientes"],["multi","Varios controles"]]))}
+      ${settingRow("Unidad de calibración",mapSelect("settings.calibration.unit",c.unit,["mm","cm","m","km","mi","ft","nmi"]))}
+      ${settingRow("Valor por píxel",mapInput("settings.calibration.pixelValue",c.pixelValue,{type:"number",step:"any"}))}
+      ${settingRow("Ancho total",mapInput("settings.calibration.totalWidth",c.totalWidth,{type:"number",step:"any"}))}
+      ${settingRow("Alto total",mapInput("settings.calibration.totalHeight",c.totalHeight,{type:"number",step:"any"}))}
+      ${settingRow("Escala X / px",mapInput("settings.calibration.scaleX",c.scaleX,{type:"number",step:"any"}))}
+      ${settingRow("Escala Y / px",mapInput("settings.calibration.scaleY",c.scaleY,{type:"number",step:"any"}))}
+      ${settingRow("Punto A",`<div class="inline-map-fields">${mapInput("settings.calibration.pointA.x",c.pointA?.x??"",{type:"number",step:"any",placeholder:"X %"})}${mapInput("settings.calibration.pointA.y",c.pointA?.y??"",{type:"number",step:"any",placeholder:"Y %"})}<button class="tiny-map-btn" data-pick-calibration="A">Elegir</button></div>`,true)}
+      ${settingRow("Punto B",`<div class="inline-map-fields">${mapInput("settings.calibration.pointB.x",c.pointB?.x??"",{type:"number",step:"any",placeholder:"X %"})}${mapInput("settings.calibration.pointB.y",c.pointB?.y??"",{type:"number",step:"any",placeholder:"Y %"})}<button class="tiny-map-btn" data-pick-calibration="B">Elegir</button></div>`,true)}
+      ${settingRow("Distancia A–B",mapInput("settings.calibration.pointDistance",c.pointDistance,{type:"number",step:"any"}))}
+    </div>
+    <div class="map-control-pairs">
+      <div class="map-mini-head"><strong>Controles múltiples</strong><button class="tiny-map-btn" data-add-control-pair>＋ Par</button></div>
+      ${c.controlPairs.length?c.controlPairs.map((p,i)=>`<div class="control-pair-row">
+        ${mapInput(`settings.calibration.controlPairs.${i}.x1`,p.x1,{type:"number",step:"any",placeholder:"X1"})}
+        ${mapInput(`settings.calibration.controlPairs.${i}.y1`,p.y1,{type:"number",step:"any",placeholder:"Y1"})}
+        ${mapInput(`settings.calibration.controlPairs.${i}.x2`,p.x2,{type:"number",step:"any",placeholder:"X2"})}
+        ${mapInput(`settings.calibration.controlPairs.${i}.y2`,p.y2,{type:"number",step:"any",placeholder:"Y2"})}
+        ${mapInput(`settings.calibration.controlPairs.${i}.distance`,p.distance,{type:"number",step:"any",placeholder:"Distancia"})}
+        <button class="tiny-map-btn danger" data-remove-control-pair="${i}">×</button>
+      </div>`).join(""):`<div class="empty small">Sin pares.</div>`}
+    </div>`;
+  }
+
+  function renderMapGlobalSettings(m){
+    const s=m.settings,{sx,sy}=mapScaleXY(m);
+    const distUnit=s.units.distance||"m";
+    return `<details class="map-config-panel"><summary>Configuración global</summary>
+      <div class="map-config-body">
+        <h4>Base</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Nombre",mapInput("title",m.title))}
+          ${settingRow("Archivo base",`<div class="inline-map-fields"><span class="map-file-name">${esc(m.image?.name||"—")}</span><button class="tiny-map-btn" data-map-load-image>Cambiar</button></div>`,true)}
+          ${settingRow("Dimensiones",`<span class="read-value">${m.image?.width||0} × ${m.image?.height||0} px</span>`)}
+          ${settingRow("Rotación",mapInput("settings.rotation",s.rotation,{type:"number",min:-360,max:360,step:1}))}
+          ${settingRow("Norte",mapInput("settings.northAngle",s.northAngle,{type:"number",min:-360,max:360,step:1}))}
+          ${settingRow("Opacidad base",mapInput("settings.baseOpacity",s.baseOpacity,{type:"range",min:0.1,max:1,step:0.05}))}
+        </div>
+
+        <h4>Coordenadas</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Sistema",mapSelect("settings.coordinates.mode",s.coordinates.mode,[["relative","Internas relativas"],["geographic","Geográficas"],["custom","Personalizadas"]]))}
+          ${settingRow("Geográficas",mapCheckbox("settings.coordinates.geographic",s.coordinates.geographic,"Habilitadas"))}
+          ${settingRow("Origen X",mapInput("settings.coordinates.originX",s.coordinates.originX,{type:"number",step:"any"}))}
+          ${settingRow("Origen Y",mapInput("settings.coordinates.originY",s.coordinates.originY,{type:"number",step:"any"}))}
+          ${settingRow("Dirección X",mapSelect("settings.coordinates.xDirection",s.coordinates.xDirection,[["right","Derecha"],["left","Izquierda"]]))}
+          ${settingRow("Dirección Y",mapSelect("settings.coordinates.yDirection",s.coordinates.yDirection,[["down","Abajo"],["up","Arriba"]]))}
+        </div>
+
+        <h4>Calibración y escala</h4>
+        ${renderCalibrationSettings(m)}
+        <div class="map-scale-result">Escala efectiva: ${sx?`${fmtNumber(mToDist(sx,distUnit),5)} ${distUnit}/px`:"sin calibrar"}${sy&&Math.abs(sy-sx)>1e-12?` · Y ${fmtNumber(mToDist(sy,distUnit),5)} ${distUnit}/px`:""}</div>
+
+        <h4>Unidades</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Distancia",mapSelect("settings.units.distance",s.units.distance,["mm","cm","m","km","mi","ft","nmi"]))}
+          ${settingRow("Área",mapSelect("settings.units.area",s.units.area,["m²","km²","ha","ft²"]))}
+          ${settingRow("Velocidad",mapSelect("settings.units.speed",s.units.speed,["m/s","km/h","mph","kn"]))}
+          ${settingRow("Tiempo",mapSelect("settings.units.time",s.units.time,["s","min","h","d"]))}
+          ${settingRow("Altitud",mapSelect("settings.units.altitude",s.units.altitude,["m","ft"]))}
+        </div>
+
+        <h4>Precisión</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Nivel",mapSelect("settings.precision.mode",s.precision.mode,["Exacta","Buena","Aproximada","Muy aproximada"]))}
+          ${settingRow("Tolerancia",mapInput("settings.precision.tolerance",s.precision.tolerance,{type:"number",step:"any"}))}
+          ${settingRow("Tipo",mapSelect("settings.precision.toleranceType",s.precision.toleranceType,["%",distUnit]))}
+        </div>
+
+        <h4>Tiempo</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Filtro temporal",mapCheckbox("settings.time.enabled",s.time.enabled,"Activo"))}
+          ${settingRow("Referencia",mapInput("settings.time.reference",s.time.reference,{placeholder:"Fecha / periodo"}))}
+        </div>
+
+        <h4>Visualización</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Marcador base",mapInput("settings.visual.markerSize",s.visual.markerSize,{type:"number",min:4,max:40,step:1}))}
+          ${settingRow("Etiqueta base",mapInput("settings.visual.labelSize",s.visual.labelSize,{type:"number",min:6,max:30,step:1}))}
+          ${settingRow("Ocultar etiquetas bajo zoom",mapInput("settings.visual.hideLabelsZoom",s.visual.hideLabelsZoom,{type:"number",min:.1,max:4,step:.1}))}
+          ${settingRow("Agrupar puntos",mapCheckbox("settings.visual.cluster",s.visual.cluster,"Activo"))}
+          ${settingRow("Grosor base",mapInput("settings.visual.lineWidth",s.visual.lineWidth,{type:"number",min:.5,max:12,step:.5}))}
+          ${settingRow("Opacidad de zonas",mapInput("settings.visual.zoneOpacity",s.visual.zoneOpacity,{type:"range",min:0,max:1,step:.05}))}
+          ${settingRow("Zoom mínimo",mapInput("settings.visual.zoomMin",s.visual.zoomMin,{type:"number",min:.1,max:10,step:.1}))}
+          ${settingRow("Zoom máximo",mapInput("settings.visual.zoomMax",s.visual.zoomMax,{type:"number",min:.2,max:20,step:.1}))}
+        </div>
+
+        <h4>Generación de rutas</h4>
+        <div class="map-settings-grid">
+          ${settingRow("Método",mapSelect("settings.routeDefaults.method",s.routeDefaults.method,[["direct","Directo"],["smooth","Suavizado"],["corridor","Preferir corredores"]]))}
+          ${settingRow("Suavizado",mapInput("settings.routeDefaults.smoothness",s.routeDefaults.smoothness,{type:"number",min:0,max:5,step:1}))}
+          ${settingRow("Densidad de puntos",mapInput("settings.routeDefaults.pointDensity",s.routeDefaults.pointDensity,{type:"number",min:2,max:100,step:1}))}
+          ${settingRow("Tolerancia",mapInput("settings.routeDefaults.tolerance",s.routeDefaults.tolerance,{type:"number",min:0,step:"any"}))}
+          ${settingRow("Obstáculos",mapCheckbox("settings.routeDefaults.respectObstacles",s.routeDefaults.respectObstacles,"Respetar"))}
+          ${settingRow("Velocidad predeterminada",mapInput("settings.routeDefaults.defaultSpeed",s.routeDefaults.defaultSpeed,{type:"number",step:"any"}))}
+          ${settingRow("Transporte predeterminado",mapInput("settings.routeDefaults.defaultTransport",s.routeDefaults.defaultTransport))}
+        </div>
+        ${renderLayerPreferenceChecks(m)}
+      </div>
+    </details>`;
+  }
+
+  function renderLayerPreferenceChecks(m){
+    const d=m.settings.routeDefaults;
+    if(!m.layers.length)return `<div class="empty small">No hay capas para preferencias/restricciones.</div>`;
+    return `<div class="map-two-columns"><div><strong>Capas restringidas</strong><div class="map-check-list">${m.layers.map(l=>`<label><input type="checkbox" data-route-layer-pref="restricted" value="${l.id}" ${d.restrictedLayerIds.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join("")}</div></div><div><strong>Capas preferidas</strong><div class="map-check-list">${m.layers.map(l=>`<label><input type="checkbox" data-route-layer-pref="preferred" value="${l.id}" ${d.preferredLayerIds.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join("")}</div></div></div>`;
+  }
+
+  function renderMapLevels(m){
+    return `<details class="map-config-panel"><summary>Niveles</summary><div class="map-config-body">
+      <div class="map-mini-head"><span></span><button class="tiny-map-btn" data-add-level>＋ Nivel</button></div>
+      ${m.levels.length?`<div class="map-table-list">${m.levels.map((l,i)=>`<div class="map-table-row level-row">
+        ${mapInput(`levels.${i}.name`,l.name||"Nivel")}
+        ${mapInput(`levels.${i}.order`,l.order??i,{type:"number",step:1,placeholder:"Orden"})}
+        ${mapInput(`levels.${i}.elevation`,l.elevation??"",{type:"number",step:"any",placeholder:"Elevación"})}
+        <label class="mini-check"><input type="checkbox" data-map-path="levels.${i}.visible" data-map-type="bool" ${l.visible!==false?"checked":""}> Visible</label>
+        <label class="mini-check"><input type="radio" name="default-level-${m.id}" data-default-level="${i}" ${l.default?"checked":""}> Pred.</label>
+        <button class="tiny-map-btn danger" data-remove-level="${i}">×</button>
+      </div>`).join("")}</div>`:`<div class="empty small">Sin niveles.</div>`}
+    </div></details>`;
+  }
+
+  function renderMapLayers(m){
+    return `<details class="map-config-panel"><summary>Capas</summary><div class="map-config-body">
+      <div class="map-mini-head"><span></span><button class="tiny-map-btn" data-add-layer>＋ Capa</button></div>
+      ${m.layers.length?`<div class="map-table-list">${m.layers.map((l,i)=>`<div class="map-table-row layer-row">
+        ${mapInput(`layers.${i}.name`,l.name||"Capa")}
+        ${mapInput(`layers.${i}.order`,l.order??i,{type:"number",step:1,placeholder:"Orden"})}
+        ${mapInput(`layers.${i}.opacity`,l.opacity??1,{type:"number",min:0,max:1,step:.05,placeholder:"Opacidad"})}
+        <input class="map-color" type="color" data-map-path="layers.${i}.style.color" value="${esc(l.style?.color||"#d4b27a")}">
+        ${mapInput(`layers.${i}.style.lineWidth`,l.style?.lineWidth??"",{type:"number",step:.1,placeholder:"Grosor"})}
+        ${mapInput(`layers.${i}.style.dash`,l.style?.dash??"",{placeholder:"Trazo"})}
+        ${mapInput(`layers.${i}.style.symbol`,l.style?.symbol??"",{placeholder:"Símbolo"})}
+        <label class="mini-check"><input type="checkbox" data-map-path="layers.${i}.visible" data-map-type="bool" ${l.visible!==false?"checked":""}> Visible</label>
+        <button class="tiny-map-btn danger" data-remove-layer="${i}">×</button>
+      </div>`).join("")}</div>`:`<div class="empty small">Sin capas.</div>`}
+    </div></details>`;
+  }
+
+  function renderMapElementList(m){
+    const labels={point:"Punto",line:"Línea",zone:"Zona",route:"Ruta"};
+    return `<details class="map-config-panel" open><summary>Elementos</summary><div class="map-config-body">
+      ${m.elements.length?`<div class="map-element-list">${m.elements.map(el=>`<div class="map-element-list-row ${el.id===selectedPlaceMapElementId?"active":""}">
+        <button class="map-element-open" data-select-map-element="${el.id}"><span>${esc(labels[el.kind]||el.kind)}</span><strong>${esc(el.name||"Sin nombre")}</strong></button>
+        <label class="mini-check"><input type="checkbox" data-element-visible="${el.id}" ${el.visible!==false?"checked":""}>◉</label>
+        <button class="tiny-map-btn danger" data-delete-map-element="${el.id}">×</button>
+      </div>`).join("")}</div>`:`<div class="empty small">Sin elementos.</div>`}
+    </div></details>`;
+  }
+
+  function renderCommonElementFields(m,el){
+    return `<div class="map-settings-grid">
+      ${settingRow("Nombre",mapInput(`elements.${m.elements.indexOf(el)}.name`,el.name))}
+      ${settingRow("Geometría",`<span class="read-value">${esc(el.kind)}</span>`)}
+      ${settingRow("Categoría",`<input class="map-field" list="map-category-list" data-map-path="elements.${m.elements.indexOf(el)}.category" value="${esc(el.category||"")}"><datalist id="map-category-list">${[...categoryMap.entries()].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("")}</datalist>`)}
+      ${settingRow("Entidad vinculada",mapSelect(`elements.${m.elements.indexOf(el)}.targetId`,el.targetId||"",[["","—"],...entities.filter(x=>x.id!==currentView.id).map(x=>[x.id,`${x.title} [${categoryName(x.category)}]`])]))}
+      ${settingRow("Desde",mapInput(`elements.${m.elements.indexOf(el)}.dateFrom`,el.dateFrom||"",{placeholder:"Fecha / periodo"}))}
+      ${settingRow("Hasta",mapInput(`elements.${m.elements.indexOf(el)}.dateTo`,el.dateTo||"",{placeholder:"Fecha / periodo"}))}
+      ${settingRow("Orden",mapInput(`elements.${m.elements.indexOf(el)}.order`,el.order??0,{type:"number",step:1}))}
+      ${settingRow("Visible",mapCheckbox(`elements.${m.elements.indexOf(el)}.visible`,el.visible!==false,"Mostrar"))}
+      ${settingRow("Color",`<input class="map-color" type="color" data-map-path="elements.${m.elements.indexOf(el)}.style.color" value="${esc(el.style?.color||layerStyleFor(m,el).color||"#d4b27a")}">`)}
+      ${settingRow("Opacidad",mapInput(`elements.${m.elements.indexOf(el)}.style.opacity`,el.style?.opacity??"",{type:"number",min:0,max:1,step:.05,placeholder:"Capa/global"}))}
+      ${settingRow("Grosor",mapInput(`elements.${m.elements.indexOf(el)}.style.lineWidth`,el.style?.lineWidth??"",{type:"number",min:.1,max:30,step:.1}))}
+      ${settingRow("Trazo",mapInput(`elements.${m.elements.indexOf(el)}.style.dash`,el.style?.dash||"",{placeholder:"Ej. 3 2"}))}
+    </div>
+    <div class="map-two-columns">
+      <div><strong>Capas</strong><div class="map-check-list">${m.layers.length?m.layers.map(l=>`<label><input type="checkbox" data-element-layer="${el.id}" value="${l.id}" ${el.layerIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join(""):`<span>—</span>`}</div></div>
+      <div><strong>Niveles</strong><div class="map-check-list">${m.levels.length?m.levels.map(l=>`<label><input type="checkbox" data-element-level="${el.id}" value="${l.id}" ${el.levelIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Nivel")}</label>`).join(""):`<span>—</span>`}</div></div>
+    </div>
+    <label class="map-textarea-label"><span>Nota</span><textarea class="map-textarea" data-map-path="elements.${m.elements.indexOf(el)}.note">${esc(el.note||"")}</textarea></label>`;
+  }
+
+  function renderNodeEditor(m,el){
+    if(!["line","zone","route"].includes(el.kind))return "";
+    const idx=m.elements.indexOf(el);
+    return `<div class="map-node-editor"><div class="map-mini-head"><strong>Nodos</strong><button class="tiny-map-btn" data-append-node="${el.id}">＋ Nodo</button></div>
+      ${toArray(el.nodes).map((n,i)=>`<div class="node-row">
+        ${mapInput(`elements.${idx}.nodes.${i}.x`,n.x,{type:"number",min:0,max:100,step:.01,placeholder:"X %"})}
+        ${mapInput(`elements.${idx}.nodes.${i}.y`,n.y,{type:"number",min:0,max:100,step:.01,placeholder:"Y %"})}
+        ${el.kind==="route"?mapSelect(`elements.${idx}.nodeLevels.${i}`,el.nodeLevels?.[i]||"",[["","Nivel —"],...m.levels.map(l=>[l.id,l.name||"Nivel"]) ]):""}
+        <button class="tiny-map-btn danger" data-remove-node="${i}" data-node-owner="${el.id}">×</button>
+      </div>`).join("")}
+    </div>`;
+  }
+
+  function renderPointSpecific(m,el){
+    const i=m.elements.indexOf(el),c=m.settings.coordinates||{};
+    const customX=(Number(c.originX)||0)+(c.xDirection==="left"?-1:1)*(Number(el.x)||0);
+    const customY=(Number(c.originY)||0)+(c.yDirection==="up"?-1:1)*(Number(el.y)||0);
+    const otherPoints=m.elements.filter(x=>x.kind==="point"&&x.id!==el.id);
+    return `<h4>Punto</h4><div class="derived-strip multi"><span>Internas <strong>X ${fmtNumber(el.x,2)}% · Y ${fmtNumber(el.y,2)}%</strong></span>${c.mode==="custom"?`<span>Personalizadas <strong>X ${fmtNumber(customX,2)} · Y ${fmtNumber(customY,2)}</strong></span>`:""}<span>Distancia a otro punto <select class="map-inline-select" data-point-distance-target="${el.id}"><option value="">—</option>${otherPoints.map(p=>`<option value="${p.id}">${esc(p.name||"Punto")}</option>`).join("")}</select> <strong data-point-distance-result>—</strong></span></div><div class="map-settings-grid">
+      ${settingRow("X %",mapInput(`elements.${i}.x`,el.x,{type:"number",min:0,max:100,step:.01}))}
+      ${settingRow("Y %",mapInput(`elements.${i}.y`,el.y,{type:"number",min:0,max:100,step:.01}))}
+      ${settingRow("Latitud",mapInput(`elements.${i}.lat`,el.lat,{type:"number",step:"any"}))}
+      ${settingRow("Longitud",mapInput(`elements.${i}.lon`,el.lon,{type:"number",step:"any"}))}
+      ${settingRow("Altitud",mapInput(`elements.${i}.altitude`,el.altitude,{type:"number",step:"any"}))}
+      ${settingRow("Símbolo",mapInput(`elements.${i}.symbol`,el.symbol||"",{placeholder:"Capa o •"}))}
+      ${settingRow("Tamaño",mapInput(`elements.${i}.size`,el.size,{type:"number",min:1,max:80,step:1}))}
+      ${settingRow("Rotación",mapInput(`elements.${i}.rotation`,el.rotation,{type:"number",min:-360,max:360,step:1}))}
+      ${settingRow("Etiqueta",mapCheckbox(`elements.${i}.label`,el.label!==false,"Mostrar"))}
+      ${settingRow("Posición etiqueta",mapSelect(`elements.${i}.labelPosition`,el.labelPosition,["top","bottom","left","right","auto"]))}
+      ${settingRow("Desplazamiento X",mapInput(`elements.${i}.labelOffsetX`,el.labelOffsetX,{type:"number",step:.1}))}
+      ${settingRow("Desplazamiento Y",mapInput(`elements.${i}.labelOffsetY`,el.labelOffsetY,{type:"number",step:.1}))}
+      ${settingRow("Radio visual",mapInput(`elements.${i}.radius`,el.radius,{type:"number",step:"any"}))}
+      ${settingRow("Dirección",mapInput(`elements.${i}.direction`,el.direction,{type:"number",min:0,max:360,step:1}))}
+    </div>`;
+  }
+
+  function renderLineSpecific(m,el){
+    const i=m.elements.indexOf(el),lineNodes=el.closed&&el.nodes?.length>2?[...el.nodes,el.nodes[0]]:el.nodes,meters=polylineMeters(m,lineNodes);
+    const elev=toArray(el.nodeElevations).map(Number).filter(Number.isFinite);const delta=elev.length>1?elev[elev.length-1]-elev[0]:null;
+    return `<h4>Línea</h4><div class="derived-strip multi"><span>Longitud <strong>${formatDistance(meters,m)}</strong></span>${delta!==null?`<span>Desnivel <strong>${fmtNumber(delta)} ${esc(m.settings.units.altitude||"m")}</strong></span>`:""}</div><div class="map-settings-grid">
+      ${settingRow("Cerrada",mapCheckbox(`elements.${i}.closed`,el.closed,"Sí"))}
+      ${settingRow("Tipo de trazo",mapSelect(`elements.${i}.strokeType`,el.strokeType,["solid","dashed","dotted"]))}
+      ${settingRow("Dirección",mapSelect(`elements.${i}.direction`,el.direction,[["none","Sin dirección"],["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
+      ${settingRow("Flechas",mapCheckbox(`elements.${i}.arrows`,el.arrows,"Mostrar"))}
+      ${settingRow("Anchura real",mapInput(`elements.${i}.realWidth`,el.realWidth,{type:"number",step:"any"}))}
+      ${settingRow("Suavizado",mapInput(`elements.${i}.smoothing`,el.smoothing,{type:"number",min:0,max:5,step:1}))}
+      ${settingRow("Elevaciones por nodo",mapInput(`elements.${i}.nodeElevations`,toArray(el.nodeElevations).join(", "),{placeholder:"0, 2, 5…"}))}
+    </div>${renderNodeEditor(m,el)}`;
+  }
+
+  function renderZoneSpecific(m,el){
+    const i=m.elements.indexOf(el),area=zoneAreaMeters2(m,el),per=zonePerimeterMeters(m,el);
+    const inside=m.elements.filter(x=>{if(x.id===el.id)return false;if(x.kind==="point")return pointInZone({x:Number(x.x),y:Number(x.y)},el);if(x.kind==="line"||x.kind==="route")return polylineCrossesZone(x.nodes,el);if(x.kind==="zone")return toArray(x.nodes).some(p=>pointInZone(p,el));return false});
+    const contained=m.elements.filter(x=>x.kind==="zone"&&x.containerId===el.id);
+    const heightM=Number(el.height)>0?distToM(el.height,m.settings.units.altitude||"m"):0;
+    const volume=heightM?area*heightM:0;
+    return `<h4>Zona</h4><div class="derived-strip multi"><span>Área <strong>${formatArea(area,m)}</strong></span><span>Perímetro <strong>${formatDistance(per,m)}</strong></span><span>Elementos dentro <strong>${inside.length}</strong></span><span>Zonas contenidas <strong>${contained.length}</strong></span>${volume?`<span>Volumen aprox. <strong>${fmtNumber(volume)} m³</strong></span>`:""}</div>
+      <div class="map-settings-grid">
+        ${settingRow("Opacidad relleno",mapInput(`elements.${i}.fillOpacity`,el.fillOpacity,{type:"number",min:0,max:1,step:.05}))}
+        ${settingRow("Borde",mapInput(`elements.${i}.borderWidth`,el.borderWidth,{type:"number",min:.1,max:30,step:.1}))}
+        ${settingRow("Etiqueta X",mapInput(`elements.${i}.labelPoint.x`,el.labelPoint?.x??"",{type:"number",min:0,max:100,step:.01}))}
+        ${settingRow("Etiqueta Y",mapInput(`elements.${i}.labelPoint.y`,el.labelPoint?.y??"",{type:"number",min:0,max:100,step:.01}))}
+        ${settingRow("Elevación",mapInput(`elements.${i}.elevation`,el.elevation,{type:"number",step:"any"}))}
+        ${settingRow("Altura",mapInput(`elements.${i}.height`,el.height,{type:"number",step:"any"}))}
+        ${settingRow("Zona contenedora",mapSelect(`elements.${i}.containerId`,el.containerId||"",[["","—"],...m.elements.filter(x=>x.kind==="zone"&&x.id!==el.id).map(z=>[z.id,z.name||"Zona"]) ]))}
+      </div>
+      <div class="zone-part-actions"><button class="tiny-map-btn" data-draw-zone-part="${el.id}">＋ Parte</button><button class="tiny-map-btn" data-draw-zone-hole="${el.id}">＋ Hueco</button><span>${toArray(el.parts).length} partes · ${toArray(el.holes).length} huecos</span></div>
+      ${renderNodeEditor(m,el)}`;
+  }
+
+  function renderRouteSegments(m,r){
+    const idx=m.elements.indexOf(r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
+    return `<div class="route-segments"><div class="map-mini-head"><strong>Tramos</strong><button class="tiny-map-btn" data-add-route-segment="${r.id}">＋ Tramo</button></div>
+      ${r.segments.length?r.segments.map((s,i)=>`<div class="route-segment-card">
+        <div class="route-segment-title"><strong>Tramo ${i+1}</strong><button class="tiny-map-btn danger" data-remove-route-segment="${i}" data-route-owner="${r.id}">×</button></div>
+        <div class="map-settings-grid">
+          ${settingRow("Nodo inicial",mapInput(`elements.${idx}.segments.${i}.fromIndex`,s.fromIndex??0,{type:"number",min:0,step:1}))}
+          ${settingRow("Nodo final",mapInput(`elements.${idx}.segments.${i}.toIndex`,s.toIndex??Math.max(1,r.nodes.length-1),{type:"number",min:1,step:1}))}
+          ${settingRow("Transporte",mapInput(`elements.${idx}.segments.${i}.transport`,s.transport||""))}
+          ${settingRow(`Velocidad (${speedUnit})`,mapInput(`elements.${idx}.segments.${i}.speed`,s.speed||"",{type:"number",step:"any"}))}
+          ${settingRow("Velocidad mínima",mapInput(`elements.${idx}.segments.${i}.speedMin`,s.speedMin||"",{type:"number",step:"any"}))}
+          ${settingRow("Velocidad máxima",mapInput(`elements.${idx}.segments.${i}.speedMax`,s.speedMax||"",{type:"number",step:"any"}))}
+          ${settingRow("Aproximada",mapCheckbox(`elements.${idx}.segments.${i}.speedApprox`,s.speedApprox,"≈"))}
+          ${settingRow("Terreno",mapInput(`elements.${idx}.segments.${i}.terrain`,s.terrain||""))}
+          ${settingRow("Pendiente",mapInput(`elements.${idx}.segments.${i}.slope`,s.slope||""))}
+          ${settingRow(`Pausas (${timeUnit})`,mapInput(`elements.${idx}.segments.${i}.pauses`,s.pauses||"",{type:"number",step:"any"}))}
+          ${settingRow("Condición",mapInput(`elements.${idx}.segments.${i}.condition`,s.condition||""))}
+          ${settingRow("Factor",mapInput(`elements.${idx}.segments.${i}.factor`,s.factor??1,{type:"number",step:.05}))}
+          ${settingRow(`Duración manual (${timeUnit})`,mapInput(`elements.${idx}.segments.${i}.durationManual`,s.durationManual||"",{type:"number",step:"any"}))}
+        </div>
+      </div>`).join(""):`<div class="empty small">Sin tramos específicos.</div>`}
+    </div>`;
+  }
+
+  function renderRouteSpecific(m,r){
+    const i=m.elements.indexOf(r),stats=routeStats(m,r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
+    const startLevel=m.levels.find(l=>l.id===r.nodeLevels?.[0]),endLevel=m.levels.find(l=>l.id===r.nodeLevels?.[r.nodeLevels.length-1]);
+    const levelDelta=startLevel&&endLevel&&Number.isFinite(Number(startLevel.elevation))&&Number.isFinite(Number(endLevel.elevation))?Number(endLevel.elevation)-Number(startLevel.elevation):null;
+    const manualDist=Number(r.manualDistance)>0?`${fmtNumber(r.manualDistance)} ${m.settings.units.distance}`:"";
+    return `<h4>Ruta</h4>
+      <div class="derived-strip multi"><span>Distancia calculada <strong>${formatDistance(stats.meters,m)}</strong></span>${manualDist?`<span>Distancia manual <strong>${manualDist}</strong></span>`:""}<span>Duración calculada <strong>${stats.seconds?`${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}`:"—"}</strong></span>${stats.secondsMin&&stats.secondsMax?`<span>Rango por velocidad <strong>${fmtNumber(secondsToTime(stats.secondsMin,timeUnit))}–${fmtNumber(secondsToTime(stats.secondsMax,timeUnit))} ${timeUnit}</strong></span>`:""}${Number(r.durationManual)>0?`<span>Duración manual <strong>${fmtNumber(r.durationManual)} ${timeUnit}</strong></span>`:""}<span>Velocidad media <strong>${stats.avgUnit?`${fmtNumber(stats.avgUnit)} ${speedUnit}`:"—"}</strong></span>${stats.calculatedArrival?`<span>Llegada calculada <strong>${esc(stats.calculatedArrival)}</strong></span>`:""}${startLevel||endLevel?`<span>Niveles <strong>${esc(startLevel?.name||"—")} → ${esc(endLevel?.name||"—")}</strong></span>`:""}${levelDelta!==null?`<span>Desnivel <strong>${fmtNumber(levelDelta)} ${esc(m.settings.units.altitude||"m")}</strong></span>`:""}</div>
+      ${stats.zones.length?`<div class="route-zones"><strong>Zonas atravesadas</strong>${stats.zones.map(z=>`<span>${esc(z.name)} · ≈${fmtNumber(z.ratio*100,1)}% · ${formatDistance(z.meters,m)}</span>`).join("")}</div>`:""}
+      ${r.proposal?`<button class="map-action accept-route" data-accept-route="${r.id}">Aceptar propuesta</button>`:""}
+      <div class="map-settings-grid">
+        ${settingRow("Origen",mapSelect(`elements.${i}.originPointId`,r.originPointId||"",[["","—"],...m.elements.filter(x=>x.kind==="point").map(p=>[p.id,p.name||"Punto"]) ]))}
+        ${settingRow("Destino",mapSelect(`elements.${i}.destinationPointId`,r.destinationPointId||"",[["","—"],...m.elements.filter(x=>x.kind==="point").map(p=>[p.id,p.name||"Punto"]) ]))}
+        ${settingRow("Circular",mapCheckbox(`elements.${i}.circular`,r.circular,"Sí"))}
+        ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,r.direction,[["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
+        ${settingRow("Modo de velocidad",mapSelect(`elements.${i}.speedMode`,r.speedMode,[["fixed","Fija"],["interval","Intervalo"],["segments","Por tramo"],["knownTime","Tiempo conocido"]]))}
+        ${settingRow(`Velocidad fija (${speedUnit})`,mapInput(`elements.${i}.fixedSpeed`,r.fixedSpeed,{type:"number",step:"any"}))}
+        ${settingRow("Velocidad mínima",mapInput(`elements.${i}.speedMin`,r.speedMin,{type:"number",step:"any"}))}
+        ${settingRow("Velocidad máxima",mapInput(`elements.${i}.speedMax`,r.speedMax,{type:"number",step:"any"}))}
+        ${settingRow("Aproximada",mapCheckbox(`elements.${i}.speedApprox`,r.speedApprox,"≈"))}
+        ${settingRow(`Duración manual (${timeUnit})`,mapInput(`elements.${i}.durationManual`,r.durationManual,{type:"number",step:"any"}))}
+        ${settingRow("Salida",mapInput(`elements.${i}.departure`,r.departure))}
+        ${settingRow("Llegada",mapInput(`elements.${i}.arrival`,r.arrival))}
+        ${settingRow("Incertidumbre",mapInput(`elements.${i}.uncertainty`,r.uncertainty))}
+        ${settingRow(`Distancia manual (${m.settings.units.distance})`,mapInput(`elements.${i}.manualDistance`,r.manualDistance,{type:"number",step:"any"}))}
+      </div>
+      <div class="map-check-list route-waypoints"><strong>Waypoints vinculados</strong>${m.elements.filter(x=>x.kind==="point").map(p=>`<label><input type="checkbox" data-route-waypoint="${r.id}" value="${p.id}" ${r.waypointPointIds?.includes(p.id)?"checked":""}> ${esc(p.name||"Punto")}</label>`).join("")||"—"}</div>
+      <div class="route-regenerate"><strong>Regenerar sección</strong>${mapInput("__regenFrom",0,{type:"number",min:0,step:1,placeholder:"Desde nodo"})}${mapInput("__regenTo",Math.max(1,r.nodes.length-1),{type:"number",min:1,step:1,placeholder:"Hasta nodo"})}<button class="tiny-map-btn" data-regenerate-route-section="${r.id}">Regenerar</button></div>
+      ${renderRouteSegments(m,r)}
+      ${renderNodeEditor(m,r)}`;
+  }
+
+  function renderElementMedia(m,el){
+    const i=m.elements.indexOf(el);
+    return `<div class="element-media"><div class="map-mini-head"><strong>Multimedia vinculada</strong><button class="tiny-map-btn" data-add-element-media="${el.id}">＋ Multimedia</button></div>${el.media?.length?`<div class="element-media-grid">${el.media.map((item,mi)=>`<div class="element-media-card">${renderMediaElement(item)}${renderEditable(item.caption||"",`place.maps.${placeData(entities.find(x=>x.id===currentView.id)).maps.indexOf(m)}.elements.${i}.media.${mi}.caption`,entities.find(x=>x.id===currentView.id),{cls:"media-caption",placeholder:"Pie opcional"})}<button class="gallery-remove" data-remove-element-media="${mi}" data-media-owner="${el.id}">×</button></div>`).join("")}</div>`:`<div class="empty small">Sin multimedia.</div>`}</div>`;
+  }
+
+  function renderSelectedElementInspector(e,m){
+    const el=placeMapElement(m);if(!el)return `<details class="map-config-panel" open><summary>Elemento seleccionado</summary><div class="map-config-body"><div class="empty small">Selecciona un punto, línea, zona o ruta.</div></div></details>`;
+    return `<details class="map-config-panel" open><summary>Elemento seleccionado · ${esc(el.name||el.kind)}</summary><div class="map-config-body">
+      ${renderCommonElementFields(m,el)}
+      ${el.kind==="point"?renderPointSpecific(m,el):el.kind==="line"?renderLineSpecific(m,el):el.kind==="zone"?renderZoneSpecific(m,el):renderRouteSpecific(m,el)}
+      ${renderElementMedia(m,el)}
+    </div></details>`;
+  }
+
+  function renderRouteGenerator(m){
+    const g=m.generator,points=m.elements.filter(x=>x.kind==="point"),zones=m.elements.filter(x=>x.kind==="zone"),lines=m.elements.filter(x=>x.kind==="line");
+    return `<details class="map-config-panel"><summary>Generar ruta</summary><div class="map-config-body">
+      <div class="map-settings-grid">
+        ${settingRow("Origen",`<select class="map-field" data-generator-field="originPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.originPointId===p.id?"selected":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
+        ${settingRow("Destino",`<select class="map-field" data-generator-field="destinationPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.destinationPointId===p.id?"selected":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
+        ${settingRow("Criterio",`<select class="map-field" data-generator-field="criterion"><option ${g.criterion==="distancia"?"selected":""}>distancia</option><option ${g.criterion==="tiempo"?"selected":""}>tiempo</option></select>`)}
+      </div>
+      <div class="map-three-columns">
+        <div><strong>Waypoints</strong><div class="map-check-list">${points.map(p=>`<label><input type="checkbox" data-generator-list="waypointIds" value="${p.id}" ${g.waypointIds.includes(p.id)?"checked":""}> ${esc(p.name||"Punto")}</label>`).join("")||"—"}</div></div>
+        <div><strong>Zonas a evitar</strong><div class="map-check-list">${zones.map(z=>`<label><input type="checkbox" data-generator-list="avoidZoneIds" value="${z.id}" ${g.avoidZoneIds.includes(z.id)?"checked":""}> ${esc(z.name||"Zona")}</label>`).join("")||"—"}</div></div>
+        <div><strong>Líneas preferidas</strong><div class="map-check-list">${lines.map(l=>`<label><input type="checkbox" data-generator-list="preferredLineIds" value="${l.id}" ${g.preferredLineIds.includes(l.id)?"checked":""}> ${esc(l.name||"Línea")}</label>`).join("")||"—"}</div></div>
+      </div>
+      <button class="map-action" data-generate-route>Generar propuesta</button>
+    </div></details>`;
+  }
+
+  function renderMapToolbar(m){
+    const drawing=placeMapTool?.mapId===m.id&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
+    return `<div class="map-toolbar">
+      <button class="map-tool" data-draw-tool="point">＋ Punto</button>
+      <button class="map-tool" data-draw-tool="line">＋ Línea</button>
+      <button class="map-tool" data-draw-tool="zone">＋ Zona</button>
+      <button class="map-tool" data-draw-tool="route">＋ Ruta manual</button>
+      ${drawing?`<button class="map-tool finish" data-finish-map-tool>Terminar</button><button class="map-tool cancel" data-cancel-map-tool>Cancelar</button>`:""}
+      <span class="map-toolbar-spacer"></span>
+      <button class="map-tool" data-map-zoom="out">−</button>
+      <button class="map-tool" data-map-zoom="reset">100%</button>
+      <button class="map-tool" data-map-zoom="in">＋</button>
+    </div>`;
+  }
+
+  function renderPlaceMaps(e){
+    const p=placeData(e);
+    if(!p.maps.length){
+      return `<section class="character-section place-no-maps"><div class="empty">Sin mapas.</div><button class="section-add" data-add-place-map>＋ Mapa</button></section>`;
+    }
+    const m=activePlaceMap(e);
+    return `<div class="place-maps-shell">
+      <div class="place-map-subtabs">${p.maps.map(x=>`<button class="place-map-subtab ${x.id===m.id?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`).join("")}<button class="place-map-subtab add" data-add-place-map>＋</button></div>
+      <div class="place-map-head"><div><strong>${esc(m.title||"Mapa")}</strong><small>${esc(m.image?.name||"Sin imagen base")}</small></div><button class="tiny-map-btn danger" data-remove-place-map="${m.id}">Quitar mapa</button></div>
+      ${renderMapToolbar(m)}
+      ${renderMapStage(m)}
+      <div class="map-panels-grid">
+        <div>${renderMapElementList(m)}${renderSelectedElementInspector(e,m)}</div>
+        <div>${renderMapLayers(m)}${renderMapLevels(m)}${renderRouteGenerator(m)}${renderMapGlobalSettings(m)}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderPlaceTab(e,tab){
+    if(tab==="description")return renderPlaceDescription(e);
+    if(tab==="maps")return renderPlaceMaps(e);
+    if(tab==="history")return renderPlaceHistory(e);
+    if(tab==="participation")return renderPlaceParticipation(e);
+    if(tab==="gallery")return renderPlaceGallery(e);
+    if(tab==="research")return renderPlaceResearch(e);
+    return renderPlaceDescription(e);
+  }
+
+  function refreshPlaceTab(e){
+    const active=$('.character-tab.active')?.dataset.placeTab||'description';
+    $('#characterTabPanel').innerHTML=renderPlaceTab(e,active);
+    wirePlaceTab(e);
+  }
+
+  async function addPlaceMediaAtPath(e,path){
+    const item=await chooseMedia();if(!item)return;
+    let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
+    arr.push(item);await saveEntityDirect(e);refreshPlaceTab(e);
+  }
+
+  function getMapPath(m,path){return getPath(m,path)}
+  function setMapPath(m,path,value){setPath(m,path,value)}
+
+  function parseMapInputValue(input){
+    if(input.dataset.mapType==="bool")return input.checked;
+    if(input.type==="number"||input.type==="range") return input.value===""?"":Number(input.value);
+    return input.value;
+  }
+
+  async function saveMapAndRefresh(e,refresh=true){
+    await saveEntityDirect(e);if(refresh)refreshPlaceTab(e);
+  }
+
+  function updateListFromChecks(selector,checked,value){
+    const arr=selector;if(checked){if(!arr.includes(value))arr.push(value)}else{const i=arr.indexOf(value);if(i>=0)arr.splice(i,1)}
+  }
+
+  function finishMapTool(e,m){
+    const t=placeMapTool;if(!t||t.mapId!==m.id)return;
+    if(t.mode==="draw-line"&&t.nodes.length>=2){const el=newMapElement("line",t.nodes);m.elements.push(el);selectedPlaceMapElementId=el.id}
+    else if(t.mode==="draw-zone"&&t.nodes.length>=3){const el=newMapElement("zone",t.nodes);m.elements.push(el);selectedPlaceMapElementId=el.id}
+    else if(t.mode==="draw-route"&&t.nodes.length>=2){const el=newMapElement("route",t.nodes);m.elements.push(el);selectedPlaceMapElementId=el.id}
+    else if(t.mode==="append-nodes"&&t.targetId){const el=placeMapElement(m,t.targetId);if(el){el.nodes.push(...t.nodes);if(el.kind==="route")el.nodeLevels.push(...t.nodes.map(()=>""))}}
+    else if(t.mode==="zone-part"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.parts.push(t.nodes)}
+    else if(t.mode==="zone-hole"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.holes.push(t.nodes)}
+    placeMapTool=null;saveMapAndRefresh(e);
+  }
+
+  function densifyPolyline(nodes,count){
+    const pts=toArray(nodes);if(pts.length<2||count<=pts.length)return pts.map(p=>({...p}));
+    const segLens=[];let total=0;
+    for(let i=1;i<pts.length;i++){const d=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);segLens.push(d);total+=d}
+    if(!total)return pts.map(p=>({...p}));
+    const out=[];
+    for(let k=0;k<count;k++){
+      const target=total*k/(count-1);let acc=0;
+      for(let i=0;i<segLens.length;i++){
+        if(acc+segLens[i]>=target||i===segLens.length-1){const t=segLens[i]?Math.max(0,Math.min(1,(target-acc)/segLens[i])):0;out.push({x:pts[i].x+(pts[i+1].x-pts[i].x)*t,y:pts[i].y+(pts[i+1].y-pts[i].y)*t});break}acc+=segLens[i];
+      }
+    }
+    return out;
+  }
+
+  function smoothPolyline(nodes,iterations){
+    let pts=toArray(nodes).map(p=>({...p}));
+    for(let it=0;it<Math.max(0,Number(iterations)||0);it++){
+      if(pts.length<3)break;const next=[pts[0]];
+      for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];next.push({x:.75*a.x+.25*b.x,y:.75*a.y+.25*b.y},{x:.25*a.x+.75*b.x,y:.25*a.y+.75*b.y})}
+      next.push(pts[pts.length-1]);pts=next;
+    }
+    return pts;
+  }
+
+  function zoneBounds(z){
+    const pts=[...toArray(z.nodes),...toArray(z.parts).flat()];
+    return {minX:Math.min(...pts.map(p=>p.x)),maxX:Math.max(...pts.map(p=>p.x)),minY:Math.min(...pts.map(p=>p.y)),maxY:Math.max(...pts.map(p=>p.y))};
+  }
+
+  function detourAroundZones(nodes,zones,pad=2){
+    let pts=nodes.map(p=>({...p}));
+    for(const z of zones){
+      const next=[pts[0]];
+      for(let i=1;i<pts.length;i++){
+        const a=next[next.length-1],b=pts[i];
+        if(polylineCrossesZone([a,b],z)){
+          const box=zoneBounds(z);
+          const candidates=[{x:box.minX-pad,y:box.minY-pad},{x:box.maxX+pad,y:box.minY-pad},{x:box.maxX+pad,y:box.maxY+pad},{x:box.minX-pad,y:box.maxY+pad}].map(p=>({x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y))}));
+          candidates.sort((p,q)=>(Math.hypot(p.x-a.x,p.y-a.y)+Math.hypot(b.x-p.x,b.y-p.y))-(Math.hypot(q.x-a.x,q.y-a.y)+Math.hypot(b.x-q.x,b.y-q.y)));
+          next.push(candidates[0]);
+        }
+        next.push(b);
+      }
+      pts=next;
+    }
+    return pts;
+  }
+
+  function generateRouteProposal(e,m){
+    const g=m.generator,d=m.settings.routeDefaults;
+    const origin=placeMapElement(m,g.originPointId),dest=placeMapElement(m,g.destinationPointId);
+    if(!origin||origin.kind!=="point"||!dest||dest.kind!=="point"){alert("Elige un punto de origen y uno de destino.");return}
+    let nodes=[{x:origin.x,y:origin.y}];
+    for(const id of g.waypointIds){const p=placeMapElement(m,id);if(p?.kind==="point")nodes.push({x:p.x,y:p.y})}
+    const preferredLayerSet=new Set(d.preferredLayerIds||[]);
+    const preferred=[...g.preferredLineIds.map(id=>placeMapElement(m,id)).filter(x=>x?.kind==="line")];
+    for(const line of m.elements.filter(x=>x.kind==="line"&&x.layerIds?.some(id=>preferredLayerSet.has(id))))if(!preferred.includes(line))preferred.push(line);
+    if((d.method==="corridor"||preferred.length)&&preferred.length){for(const line of preferred)nodes.push(...toArray(line.nodes).map(p=>({...p})))}
+    nodes.push({x:dest.x,y:dest.y});
+    const avoid=[...g.avoidZoneIds.map(id=>placeMapElement(m,id)).filter(x=>x?.kind==="zone")];
+    if(d.respectObstacles){
+      const restricted=new Set(d.restrictedLayerIds||[]);
+      for(const z of m.elements.filter(x=>x.kind==="zone"&&x.layerIds?.some(id=>restricted.has(id))))if(!avoid.includes(z))avoid.push(z);
+    }
+    if(avoid.length)nodes=detourAroundZones(nodes,avoid,Math.max(1,Number(d.tolerance)||2));
+    nodes=densifyPolyline(nodes,Math.max(nodes.length,Number(d.pointDensity)||nodes.length));
+    nodes=smoothPolyline(nodes,Number(d.smoothness)||0);
+    const r=newMapElement("route",nodes);r.name="Ruta propuesta";r.proposal=true;r.originPointId=origin.id;r.destinationPointId=dest.id;r.waypointPointIds=[...g.waypointIds];r.fixedSpeed=d.defaultSpeed;r.generation=JSON.parse(JSON.stringify(g));
+    m.elements.push(r);selectedPlaceMapElementId=r.id;saveMapAndRefresh(e);
+  }
+
+  function updateSvgSelectedGeometry(m,el){
+    const svg=$('[data-map-stage]');if(!svg)return;
+    const shape=svg.querySelector(`[data-map-element="${CSS.escape(el.id)}"].map-shape`);
+    if(el.kind==="point"){
+      const circle=shape?.querySelector('circle');if(circle){circle.setAttribute('cx',el.x);circle.setAttribute('cy',el.y)}
+    }else if(shape){shape.setAttribute('points',svgPoints(el.nodes))}
+    svg.querySelectorAll('.map-node-handle').forEach(h=>{
+      const part=h.dataset.nodePart,idx=Number(h.dataset.nodeIndex),pi=Number(h.dataset.partIndex||0);let p;
+      if(part==="point")p={x:el.x,y:el.y};else if(part==="nodes")p=el.nodes[idx];else p=el[part]?.[pi]?.[idx];
+      if(p){h.setAttribute('cx',p.x);h.setAttribute('cy',p.y)}
+    });
+  }
+
+  function wireMapStage(e,m){
+    const svg=$('[data-map-stage]');if(!svg)return;
+    svg.onclick=async ev=>{
+      const p=eventMapPoint(svg,ev,m);
+      const t=placeMapTool;
+      if(t&&t.mapId===m.id){
+        if(t.mode==="pick-calibration-A"||t.mode==="pick-calibration-B"){
+          const key=t.mode.endsWith("A")?"pointA":"pointB";m.settings.calibration[key]=p;placeMapTool=null;await saveMapAndRefresh(e);return;
+        }
+        if(t.mode==="draw-point"){
+          const el=newMapElement("point",[p]);m.elements.push(el);selectedPlaceMapElementId=el.id;placeMapTool=null;await saveMapAndRefresh(e);return;
+        }
+        t.nodes.push(p);refreshPlaceTab(e);return;
+      }
+      const shape=ev.target.closest?.('[data-map-element]');
+      if(shape&&!ev.target.classList.contains('map-node-handle')){
+        selectedPlaceMapElementId=shape.dataset.mapElement;refreshPlaceTab(e);return;
+      }
+    };
+
+    let drag=null;
+    svg.querySelectorAll('.map-node-handle').forEach(handle=>{
+      handle.onpointerdown=ev=>{ev.preventDefault();ev.stopPropagation();handle.setPointerCapture(ev.pointerId);drag={handle,pointerId:ev.pointerId,part:handle.dataset.nodePart,index:Number(handle.dataset.nodeIndex),partIndex:Number(handle.dataset.partIndex||0)}};
+      handle.onpointermove=ev=>{
+        if(!drag||drag.pointerId!==ev.pointerId)return;const p=eventMapPoint(svg,ev,m);const el=placeMapElement(m);if(!el)return;
+        if(drag.part==="point"){el.x=p.x;el.y=p.y}else if(drag.part==="nodes")el.nodes[drag.index]=p;else if(el[drag.part]?.[drag.partIndex])el[drag.part][drag.partIndex][drag.index]=p;
+        updateSvgSelectedGeometry(m,el);
+      };
+      handle.onpointerup=async ev=>{if(!drag)return;try{handle.releasePointerCapture(ev.pointerId)}catch{}drag=null;await saveEntityDirect(e);refreshPlaceTab(e)};
+    });
+  }
+
+  function wirePlaceMap(e,m){
+    $$('[data-place-map-tab]').forEach(btn=>btn.onclick=()=>{activePlaceMapId=btn.dataset.placeMapTab;selectedPlaceMapElementId="";placeMapTool=null;refreshPlaceTab(e)});
+    $('[data-add-place-map]')?.addEventListener('click',async()=>{
+      const title=prompt('Nombre del mapa:','Nuevo mapa');if(title===null)return;const nm=newPlaceMap(title||'Nuevo mapa');placeData(e).maps.push(nm);activePlaceMapId=nm.id;selectedPlaceMapElementId="";await saveMapAndRefresh(e);
+    });
+    $$('[data-remove-place-map]').forEach(btn=>btn.onclick=async()=>{const p=placeData(e),idx=p.maps.findIndex(x=>x.id===btn.dataset.removePlaceMap);if(idx<0)return;if(!confirm('¿Quitar este mapa?'))return;p.maps.splice(idx,1);activePlaceMapId=p.maps[0]?.id||"";selectedPlaceMapElementId="";placeMapTool=null;await saveMapAndRefresh(e)});
+    $$('[data-map-load-image]').forEach(btn=>btn.onclick=async()=>{const img=await chooseMapImage();if(!img)return;m.image=img;await saveMapAndRefresh(e)});
+
+    $$('[data-map-path]').forEach(input=>{
+      const handler=async()=>{
+        const path=input.dataset.mapPath;if(path.startsWith('__'))return;
+        let value=parseMapInputValue(input);
+        if(path.endsWith('nodeElevations')&&typeof value==='string')value=value.split(',').map(x=>Number(x.trim())).filter(Number.isFinite);
+        setMapPath(m,path,value);await saveMapAndRefresh(e);
+      };
+      input.onchange=handler;
+    });
+
+    $$('[data-pick-calibration]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:`pick-calibration-${btn.dataset.pickCalibration}`,mapId:m.id,nodes:[]};toast(`Haz clic en el mapa para elegir el punto ${btn.dataset.pickCalibration}.`)});
+    $('[data-add-control-pair]')?.addEventListener('click',async()=>{m.settings.calibration.controlPairs.push({x1:"",y1:"",x2:"",y2:"",distance:""});await saveMapAndRefresh(e)});
+    $$('[data-remove-control-pair]').forEach(btn=>btn.onclick=async()=>{m.settings.calibration.controlPairs.splice(Number(btn.dataset.removeControlPair),1);await saveMapAndRefresh(e)});
+
+    $('[data-add-layer]')?.addEventListener('click',async()=>{m.layers.push({id:mapUid('layer'),name:'Nueva capa',order:m.layers.length,visible:true,opacity:1,style:{color:'#d4b27a'}});await saveMapAndRefresh(e)});
+    $$('[data-remove-layer]').forEach(btn=>btn.onclick=async()=>{const item=m.layers[Number(btn.dataset.removeLayer)];if(!item)return;m.layers.splice(Number(btn.dataset.removeLayer),1);m.elements.forEach(el=>el.layerIds=(el.layerIds||[]).filter(id=>id!==item.id));await saveMapAndRefresh(e)});
+    $('[data-add-level]')?.addEventListener('click',async()=>{m.levels.push({id:mapUid('level'),name:'Nuevo nivel',order:m.levels.length,elevation:'',visible:true,default:!m.levels.length});await saveMapAndRefresh(e)});
+    $$('[data-remove-level]').forEach(btn=>btn.onclick=async()=>{const item=m.levels[Number(btn.dataset.removeLevel)];if(!item)return;m.levels.splice(Number(btn.dataset.removeLevel),1);m.elements.forEach(el=>{el.levelIds=(el.levelIds||[]).filter(id=>id!==item.id);if(el.nodeLevels)el.nodeLevels=el.nodeLevels.map(id=>id===item.id?'':id)});await saveMapAndRefresh(e)});
+    $$('[data-default-level]').forEach(r=>r.onchange=async()=>{m.levels.forEach((l,i)=>l.default=i===Number(r.dataset.defaultLevel));await saveMapAndRefresh(e)});
+
+    $$('[data-route-layer-pref]').forEach(c=>c.onchange=async()=>{const key=c.dataset.routeLayerPref==='restricted'?'restrictedLayerIds':'preferredLayerIds';updateListFromChecks(m.settings.routeDefaults[key],c.checked,c.value);await saveMapAndRefresh(e)});
+
+    $$('[data-draw-tool]').forEach(btn=>btn.onclick=()=>{const mode=btn.dataset.drawTool;placeMapTool={mode:mode==='point'?'draw-point':mode==='line'?'draw-line':mode==='zone'?'draw-zone':'draw-route',mapId:m.id,nodes:[]};refreshPlaceTab(e)});
+    $('[data-finish-map-tool]')?.addEventListener('click',()=>finishMapTool(e,m));
+    $('[data-cancel-map-tool]')?.addEventListener('click',()=>{placeMapTool=null;refreshPlaceTab(e)});
+
+    $$('[data-select-map-element]').forEach(btn=>btn.onclick=()=>{selectedPlaceMapElementId=btn.dataset.selectMapElement;placeMapTool=null;refreshPlaceTab(e)});
+    $$('[data-delete-map-element]').forEach(btn=>btn.onclick=async()=>{const idx=m.elements.findIndex(x=>x.id===btn.dataset.deleteMapElement);if(idx<0)return;m.elements.splice(idx,1);if(selectedPlaceMapElementId===btn.dataset.deleteMapElement)selectedPlaceMapElementId="";await saveMapAndRefresh(e)});
+    $$('[data-element-visible]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementVisible);if(el){el.visible=c.checked;await saveMapAndRefresh(e)}});
+    $$('[data-element-layer]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLayer);if(el){el.layerIds||=[];updateListFromChecks(el.layerIds,c.checked,c.value);await saveMapAndRefresh(e)}});
+    $$('[data-element-level]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLevel);if(el){el.levelIds||=[];updateListFromChecks(el.levelIds,c.checked,c.value);await saveMapAndRefresh(e)}});
+
+    $$('[data-route-waypoint]').forEach(c=>c.onchange=async()=>{const r=placeMapElement(m,c.dataset.routeWaypoint);if(!r)return;r.waypointPointIds||=[];updateListFromChecks(r.waypointPointIds,c.checked,c.value);await saveMapAndRefresh(e)});
+    $$('[data-point-distance-target]').forEach(sel=>sel.onchange=()=>{const a=placeMapElement(m,sel.dataset.pointDistanceTarget),b=placeMapElement(m,sel.value),out=sel.parentElement.querySelector('[data-point-distance-result]');if(!a||!b||!out){if(out)out.textContent='—';return}out.textContent=formatDistance(segmentMeters(m,{x:a.x,y:a.y},{x:b.x,y:b.y}),m)});
+
+    $$('[data-append-node]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'append-nodes',mapId:m.id,targetId:btn.dataset.appendNode,nodes:[]};refreshPlaceTab(e)});
+    $$('[data-remove-node]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.nodeOwner),idx=Number(btn.dataset.removeNode);if(!el)return;el.nodes.splice(idx,1);if(el.nodeLevels)el.nodeLevels.splice(idx,1);await saveMapAndRefresh(e)});
+    $$('[data-draw-zone-part]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'zone-part',mapId:m.id,targetId:btn.dataset.drawZonePart,nodes:[]};refreshPlaceTab(e)});
+    $$('[data-draw-zone-hole]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'zone-hole',mapId:m.id,targetId:btn.dataset.drawZoneHole,nodes:[]};refreshPlaceTab(e)});
+
+    $$('[data-add-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.addRouteSegment);if(!r)return;r.segments.push({fromIndex:0,toIndex:Math.max(1,r.nodes.length-1),transport:m.settings.routeDefaults.defaultTransport||'',speed:m.settings.routeDefaults.defaultSpeed||'',speedMin:'',speedMax:'',speedApprox:false,terrain:'',slope:'',pauses:'',condition:'',factor:1,durationManual:''});await saveMapAndRefresh(e)});
+    $$('[data-remove-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.routeOwner);if(!r)return;r.segments.splice(Number(btn.dataset.removeRouteSegment),1);await saveMapAndRefresh(e)});
+    $$('[data-accept-route]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.acceptRoute);if(!r)return;r.proposal=false;if(r.name==='Ruta propuesta')r.name='Ruta';await saveMapAndRefresh(e)});
+    $$('[data-regenerate-route-section]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.regenerateRouteSection);if(!r)return;const wrap=btn.closest('.route-regenerate'),inputs=wrap.querySelectorAll('[data-map-path^="__regen"]');const from=Math.max(0,Number(inputs[0]?.value)||0),to=Math.min(r.nodes.length-1,Number(inputs[1]?.value)||r.nodes.length-1);if(to<=from)return;let repl=densifyPolyline([r.nodes[from],r.nodes[to]],Math.max(2,Number(m.settings.routeDefaults.pointDensity)||2));repl=smoothPolyline(repl,Number(m.settings.routeDefaults.smoothness)||0);r.nodes.splice(from,to-from+1,...repl);r.nodeLevels=r.nodes.map((_,i)=>r.nodeLevels?.[i]||'');await saveMapAndRefresh(e)});
+
+    $$('[data-add-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.addElementMedia);if(!el)return;const item=await chooseMedia();if(!item)return;el.media||=[];el.media.push(item);await saveMapAndRefresh(e)});
+    $$('[data-remove-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.mediaOwner);if(!el)return;el.media.splice(Number(btn.dataset.removeElementMedia),1);await saveMapAndRefresh(e)});
+
+    $$('[data-generator-field]').forEach(input=>input.onchange=async()=>{m.generator[input.dataset.generatorField]=input.value;await saveEntityDirect(e)});
+    $$('[data-generator-list]').forEach(c=>c.onchange=async()=>{const arr=m.generator[c.dataset.generatorList];updateListFromChecks(arr,c.checked,c.value);await saveEntityDirect(e)});
+    $('[data-generate-route]')?.addEventListener('click',()=>generateRouteProposal(e,m));
+
+    $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),min=Number(m.settings.visual.zoomMin)||.5,max=Number(m.settings.visual.zoomMax)||4;if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
+
+    wireMapStage(e,m);
+  }
+
+  function wirePlaceMedia(e){
+    $$('[data-place-add-media]').forEach(btn=>btn.onclick=()=>addPlaceMediaAtPath(e,btn.dataset.placeAddMedia));
+    $$('[data-media-position]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.position=btn.dataset.mediaPosition;await saveEntityDirect(e);refreshPlaceTab(e)});
+    $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]'),arr=getPath(e,block.dataset.mediaPath)||[];arr.splice(Number(block.dataset.mediaIndex),1);await saveEntityDirect(e);refreshPlaceTab(e)});
+    $$('.media-size').forEach(range=>{range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};range.onchange=async()=>{const block=range.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);applyMediaRules()}});
+  }
+
+  function wirePlaceTab(e){
+    wireEntityLinks();wireDirectEditors(e);wirePlaceMedia(e);
+    $('[data-place-add-history]')?.addEventListener('click',async()=>{placeData(e).history.push({title:'Nuevo apartado',body:'',media:[]});await saveEntityDirect(e);refreshPlaceTab(e)});
+    $$('[data-place-remove-history]').forEach(btn=>btn.onclick=async()=>{placeData(e).history.splice(Number(btn.dataset.placeRemoveHistory),1);await saveEntityDirect(e);refreshPlaceTab(e)});
+    $('[data-place-add-gallery]')?.addEventListener('click',async()=>{const item=await chooseMedia();if(!item)return;placeData(e).gallery.push(item);await saveEntityDirect(e);refreshPlaceTab(e)});
+    $$('[data-place-remove-gallery]').forEach(btn=>btn.onclick=async()=>{placeData(e).gallery.splice(Number(btn.dataset.placeRemoveGallery),1);await saveEntityDirect(e);refreshPlaceTab(e)});
+    $$('[data-place-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.placeSelectPath,sel.value);await saveEntityDirect(e)});
+    const active=$('.character-tab.active')?.dataset.placeTab;if(active==='maps'){const m=activePlaceMap(e);if(m)wirePlaceMap(e,m)}
+    requestAnimationFrame(()=>requestAnimationFrame(applyMediaRules));
+  }
+
+  function showPlaceEntity(e,tab="description"){
+    currentView={type:"entity",id:e.id};setActive("");placeData(e);
+    const valid=PLACE_TABS.map(x=>x[0]);let active=valid.includes(tab)?tab:"description";
+    if(active==='maps'){const m=activePlaceMap(e);if(m)activePlaceMapId=m.id}
+    $("#view").innerHTML=`<div class="character-page place-page">
+      <div class="page-head">${backButton()}<h1 class="page-title">Lugares</h1></div>
+      <header class="character-titlebar"><div class="character-title-copy"><h1>${esc(e.title)}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
+      <div class="character-wiki-layout">${renderPlaceInfobox(e)}<main class="character-article">
+        <nav class="character-tabs" aria-label="Secciones del lugar">${PLACE_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-place-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
+        <section id="characterTabPanel" class="character-tab-panel">${renderPlaceTab(e,active)}</section>
+      </main></div>${renderTechnical(e)}</div>`;
+    $("#pageBack").onclick=()=>showCategory("lugares");
+    $$('[data-place-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.placeTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderPlaceTab(e,active);wirePlaceTab(e)});
+    $("#copyMasterTag").onclick=()=>copyText(e.masterTag||e.id);$("#copyInternalLink").onclick=()=>copyText(`[[${e.masterTag||e.id}|${e.title}]]`);
+    wirePlaceTab(e);history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
+  }
+
   function showEntity(id,tab="overview"){
     const e=entities.find(x=>x.id===id);
     if(!e) return;
 
     if(e.category==="personajes"){
       showCharacterEntity(e,tab==="overview" ? "profile" : tab);
+      return;
+    }
+
+    if(e.category==="lugares"){
+      showPlaceEntity(e,tab==="overview" ? "description" : tab);
       return;
     }
 

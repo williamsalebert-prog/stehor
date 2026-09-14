@@ -88,3 +88,20 @@ Consulta `PERSONAJES_TANDA0.md`.
 - Participación es de solo lectura y se deriva de referencias/hipervínculos presentes en los datos del personaje.
 - Investigación: Personaje Real/Inventado; Estado Nuevo/En desarrollo/Final; Fuentes, Pendientes y Notas editables.
 - Los archivos multimedia seleccionados se guardan como datos dentro de IndexedDB/backup JSON para que no haya que volver a cargarlos localmente.
+
+## A6.6 — Lugares y mapas interactivos
+- Lugares usa ficha rápida y las pestañas: Descripción, Mapas, Historia, Participación, Galería e Investigación.
+- Descripción e Historia conservan edición directa y multimedia de A6.5.
+- Un Lugar admite cero, uno o varios mapas mediante subtabs con nombre libre.
+- Cada mapa admite imagen/GIF base, coordenadas internas relativas, coordenadas geográficas/manuales, origen personalizado, orientación de ejes, rotación y norte.
+- Calibración global: valor por píxel, dimensiones totales, dos puntos, X/Y independientes y varios pares de control.
+- Unidades configurables para distancia, área, velocidad, tiempo y altitud; precisión y tolerancia configurables.
+- Capas y niveles completamente configurables por mapa.
+- Elementos geométricos disponibles: Punto, Línea, Zona y Ruta.
+- Propiedades comunes: categoría, capas, niveles, entidad enlazada, notas, fechas, visibilidad, orden, estilo y multimedia.
+- Puntos: coordenadas, geocoordenadas, altitud, símbolo, tamaño, rotación, etiqueta, radio y dirección.
+- Líneas: nodos, cierre, tipo de trazo, dirección/flechas, longitud calculada, anchura real, suavizado y elevaciones.
+- Zonas: vértices, huecos, partes, área/perímetro, relleno, borde, etiqueta, elevación/altura, zona contenedora y cálculos de contenido.
+- Rutas: origen/destino, waypoints, nodos y niveles, sentido/circularidad, tramos, transportes, velocidades, pausas, condiciones, factores, duración y distancia manuales, fechas e incertidumbre.
+- Generación de rutas como propuesta editable: waypoints, zonas a evitar, líneas/capas preferidas, suavizado, densidad y obstáculos; luego puede aceptarse o corregirse moviendo nodos.
+- Cálculos derivados: longitudes, áreas, perímetros, volumen aproximado, distancia entre puntos, distancia/duración/velocidad media de rutas, zonas atravesadas, porcentaje aproximado dentro de zonas, niveles y desnivel cuando hay datos.
