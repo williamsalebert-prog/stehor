@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.2-personajes";
+  const APP_BUILD = "A6.5-personajes-edicion-directa";
   const STORE = "entities";
 
   let db;
@@ -218,21 +218,20 @@
   }
   async function ensureSeed(){
     const all=await getAll();
-
     if(!all.length){
       for(const e of window.SETHORIA_DEMO.seedEntities) await putEntity(e);
+      localStorage.setItem("sethoria-demo-build","a65");
       return getAll();
     }
 
-    // Refresca únicamente las entidades demo-* para que los cambios
-    // de prototipo sí se vean entre versiones. No toca datos reales.
-    const demoSeeds = window.SETHORIA_DEMO.seedEntities || [];
-    for(const seed of demoSeeds){
-      if(String(seed.id || "").startsWith("demo-")){
-        await putEntity(seed);
+    // La demo se migra una sola vez a la estructura A6.5. Después, incluso
+    // los registros demo-* quedan editables y no se vuelven a sobrescribir.
+    if(localStorage.getItem("sethoria-demo-build")!=="a65"){
+      for(const seed of (window.SETHORIA_DEMO.seedEntities||[])){
+        if(String(seed.id||"").startsWith("demo-")) await putEntity(seed);
       }
+      localStorage.setItem("sethoria-demo-build","a65");
     }
-
     return getAll();
   }
 
@@ -756,9 +755,8 @@
 
 
   // ============================================================
-  // PERSONAJES — BORRADOR 2
-  // Perfil, Apariencia, Historia, Lazos, Galería, Participación,
-  // Investigación. La tabla lateral es fija y compacta.
+  // PERSONAJES — A6.5
+  // Wiki personal: edición directa, sin modo de edición.
   // ============================================================
 
   const CHARACTER_TABS = [
@@ -771,593 +769,392 @@
     ["research","Investigación","fuentes"]
   ];
 
+  const PROFILE_FIELDS = [
+    ["personality","Personalidad"],
+    ["psychology","Psicología"],
+    ["capabilities","Habilidades y conocimientos"],
+    ["weaknesses","Debilidades y limitaciones"],
+    ["motivations","Motivaciones"],
+    ["customs","Costumbres y hábitos"],
+    ["tastes","Gustos e intereses"]
+  ];
+
+  const APPEARANCE_FIELDS = [
+    ["general","Aspecto general"],
+    ["clothing","Ropa"],
+    ["equipment","Equipo"],
+    ["weapons","Armas"],
+    ["distinctive","Rasgos distintivos"]
+  ];
+
+  const BOND_GROUPS = [
+    ["alliances","Alianzas"],
+    ["family","Familia"],
+    ["enemies","Enemigos"],
+    ["other","Otros"]
+  ];
+
   function characterData(e){
-    return e.character || e.personaje || {};
+    if(!e.character) e.character={};
+    return e.character;
   }
 
-  function normalizeRows(value){
-    if(!value) return [];
-    if(Array.isArray(value)){
-      return value.map(row=>{
-        if(typeof row==="string") return {label:"Dato",value:row};
-        return {
-          label:row.label || row.name || row.title || "Dato",
-          value:row.value ?? row.text ?? row.content ?? ""
-        };
-      });
-    }
-    if(typeof value==="object"){
-      return Object.entries(value).map(([label,v])=>({label,value:v}));
-    }
-    return [];
+  function getPath(obj,path){
+    return String(path||"").split(".").filter(Boolean).reduce((cur,key)=>cur?.[/^\\d+$/.test(key)?Number(key):key],obj);
   }
 
-  function textKey(str){
-    return String(str||"")
-      .toLocaleLowerCase("es")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g,"")
-      .replace(/[^a-z0-9]+/g,"")
-      .trim();
+  function setPath(obj,path,value){
+    const parts=String(path||"").split(".").filter(Boolean);
+    let cur=obj;
+    parts.forEach((part,i)=>{
+      const key=/^\\d+$/.test(part)?Number(part):part;
+      if(i===parts.length-1){cur[key]=value;return}
+      const next=parts[i+1];
+      if(cur[key]==null || typeof cur[key]!=="object") cur[key]=/^\\d+$/.test(next)?[]:{};
+      cur=cur[key];
+    });
   }
 
-  function valueFromStructured(source, keys=[], labels=[]){
-    if(!source) return "";
-    if(source && typeof source==="object" && !Array.isArray(source)){
-      for(const k of keys){
-        if(source[k]!==undefined && source[k]!==null && source[k]!=="") return source[k];
-      }
-      const entries=Object.entries(source);
-      for(const [k,v] of entries){
-        const nk=textKey(k);
-        if(labels.some(l=>nk===textKey(l)) && v!==undefined && v!==null && v!=="") return v;
-      }
-    }
-    if(Array.isArray(source)){
-      for(const row of source){
-        const label = row?.label || row?.name || row?.title || "";
-        if(labels.some(l=>textKey(label)===textKey(l))){
-          const val = row?.value ?? row?.text ?? row?.content ?? "";
-          if(val!==undefined && val!==null && val!=="") return val;
-        }
-      }
-    }
-    return "";
+  async function saveEntityDirect(e){
+    await putEntity(e);
+    const idx=entities.findIndex(x=>x.id===e.id);
+    if(idx>=0) entities[idx]=e;
   }
 
-  function dash(value){
-    if(value===undefined || value===null) return "—";
-    if(Array.isArray(value)) return value.length ? value : "—";
-    if(typeof value==="string") return value.trim() ? value : "—";
-    if(typeof value==="object") return Object.keys(value).length ? value : "—";
-    return value;
+  function editableRaw(value,type="text"){
+    if(Array.isArray(value)) return value.join("\n");
+    if(value==null || value==="—") return "";
+    return String(value);
   }
 
-  function makeInfoRow(label,value){
-    return {label,value:dash(value)};
+  function renderEditable(value,path,e,{lines=false,cls="",placeholder="—"}={}){
+    const raw=editableRaw(value,lines?"lines":"text");
+    const shown=raw || placeholder;
+    return `<div class="direct-edit ${cls}" contenteditable="true" spellcheck="true"
+      data-edit-path="${esc(path)}" data-edit-type="${lines?"lines":"text"}"
+      data-edit-empty="${esc(placeholder)}">${linkifyText(shown,e.id)}</div>`;
   }
 
-  function characterInfoGroups(e){
+  function wireDirectEditors(e){
+    $$('[data-edit-path]').forEach(el=>{
+      el.onfocus=()=>{
+        if(el.dataset.editing==="1") return;
+        el.dataset.editing="1";
+        const value=getPath(e,el.dataset.editPath);
+        el.textContent=editableRaw(value,el.dataset.editType);
+        if(!el.textContent) el.textContent="";
+      };
+      el.onblur=async()=>{
+        const path=el.dataset.editPath;
+        const raw=el.innerText.replace(/\u00a0/g," ").trim();
+        const value=el.dataset.editType==="lines"
+          ? raw.split(/\n+/).map(x=>x.trim()).filter(Boolean)
+          : raw;
+        setPath(e,path,value);
+        await saveEntityDirect(e);
+        el.dataset.editing="0";
+        el.innerHTML=linkifyText(raw || el.dataset.editEmpty || "—",e.id);
+        wireEntityLinks();
+      };
+    });
+  }
+
+  function normalizeInfo(e){
     const c=characterData(e);
-    const info=c.info || c.infobox || {};
-    const personal = info.personal || c.personal || {};
-    const story = info.story || info.narrative || c.narrative || {};
-    const appearance = info.appearance || c.appearanceFacts || {};
-
-    return [
-      {
-        title:"Información personal",
-        rows:[
-          makeInfoRow("También conocido como", valueFromStructured(personal,["aka","alsoKnownAs","aliases","nicknames"],["tambien conocido como","también conocido como","alias","apodos"]) || toArray(e.aliases)),
-          makeInfoRow("Género", valueFromStructured(personal,["gender","genre"],["género","genero"])),
-          makeInfoRow("Nacionalidad", valueFromStructured(personal,["nationality"],["nacionalidad"]) || e.nationality),
-          makeInfoRow("Cultura", valueFromStructured(personal,["culture","people"],["cultura","cultura/pueblo","pueblo"])),
-          makeInfoRow("Idiomas", valueFromStructured(personal,["languages","idiomas"],["idiomas"]) || e.languages),
-          makeInfoRow("Religión", valueFromStructured(personal,["religion"],["religión","religion"])),
-          makeInfoRow("Ocupación", valueFromStructured(personal,["occupation","job","ocupacion"],["ocupación","ocupacion","profesión","profesion","ocupación / profesión"])),
-          makeInfoRow("Nacimiento", valueFromStructured(personal,["birth","born"],["nacimiento"]) || e.birth),
-          makeInfoRow("Fallecimiento", valueFromStructured(personal,["death","died"],["fallecimiento","muerte"]) || e.death),
-          makeInfoRow("Edad", valueFromStructured(personal,["age","ageText"],["edad"]) || e.ageText),
-          makeInfoRow("Estado civil", valueFromStructured(personal,["civilStatus","maritalStatus"],["estado civil"]) || e.relationshipText)
-        ]
-      },
-      {
-        title:"En la historia",
-        rows:[
-          makeInfoRow("Primera aparición", valueFromStructured(story,["firstAppearance"],["primera aparición","primera aparicion"]) || e.firstAppearance),
-          makeInfoRow("Relaciones importantes", valueFromStructured(story,["importantRelations"],["relaciones importantes"]) || e.importantRelations)
-        ]
-      },
-      {
-        title:"Descripción física",
-        rows:[
-          makeInfoRow("Cabello", valueFromStructured(appearance,["hair"],["cabello"])),
-          makeInfoRow("Ojos", valueFromStructured(appearance,["eyes"],["ojos"])),
-          makeInfoRow("Piel", valueFromStructured(appearance,["skin"],["piel"])),
-          makeInfoRow("Complexión", valueFromStructured(appearance,["build","complexion"],["complexión","complexion"]))
-        ]
-      }
-    ];
+    c.info ||= {};
+    c.info.personal ||= {};
+    c.info.story ||= {};
+    c.info.appearance ||= {};
+    c.profile ||= {};
+    c.profileMedia ||= {};
+    c.appearanceTab ||= {};
+    c.appearanceMedia ||= {};
+    c.history ||= [];
+    c.relationships ||= {};
+    for(const [key] of BOND_GROUPS) c.relationships[key] ||= [];
+    c.gallery ||= [];
+    c.research ||= {};
+    return c;
   }
 
-  function renderInfoboxValue(value,e){
-    if(Array.isArray(value)){
-      if(!value.length) return "—";
-      return `<ul class="infobox-simple-list">${value.map(item=>{
-        const text = typeof item==="string" ? item : (item?.text ?? item?.value ?? item?.label ?? "");
-        return `<li>${linkifyText(String(text||"—"),e.id)}</li>`;
-      }).join("")}</ul>`;
-    }
-    return linkifyText(String(value ?? "—"),e.id);
+  function infoRows(e){
+    normalizeInfo(e);
+    return [
+      {title:"Información personal",rows:[
+        ["También conocido como","character.info.personal.aka",true],
+        ["Género","character.info.personal.gender",false],
+        ["Nacionalidad","character.info.personal.nationality",false],
+        ["Cultura","character.info.personal.culture",false],
+        ["Idiomas","character.info.personal.languages",true],
+        ["Religión","character.info.personal.religion",false],
+        ["Ocupación","character.info.personal.occupation",false],
+        ["Nacimiento","character.info.personal.birth",false],
+        ["Fallecimiento","character.info.personal.death",false],
+        ["Edad","character.info.personal.age",false],
+        ["Estado civil","character.info.personal.civilStatus",false]
+      ]},
+      {title:"En la historia",rows:[
+        ["Primera aparición","character.info.story.firstAppearance",false],
+        ["Relaciones importantes","character.info.story.importantRelations",true]
+      ]},
+      {title:"Descripción física",rows:[
+        ["Cabello","character.info.appearance.hair",false],
+        ["Ojos","character.info.appearance.eyes",false],
+        ["Piel","character.info.appearance.skin",false],
+        ["Complexión","character.info.appearance.build",false]
+      ]}
+    ];
   }
 
   function renderCharacterInfobox(e){
-    const groups=characterInfoGroups(e);
+    normalizeInfo(e);
     const image=getImage(e);
-
     return `<aside class="character-infobox">
       <div class="character-portrait-shell">
         <div class="character-portrait">
-          ${image
-            ? `<img src="${esc(image)}" alt="">`
-            : `<div class="character-portrait-placeholder">${icon("personajes")}</div>`}
+          ${image?`<img src="${esc(image)}" alt="">`:`<div class="character-portrait-placeholder">${icon("personajes")}</div>`}
         </div>
         <div class="portrait-ornament"></div>
       </div>
-
-      ${groups.map(group=>`
-        <section class="infobox-section">
-          <h3>${esc(group.title)}</h3>
-          <dl>
-            ${group.rows.map(row=>`
-              <div class="infobox-row">
-                <dt>${esc(row.label)}</dt>
-                <dd>${renderInfoboxValue(row.value,e)}</dd>
-              </div>
-            `).join("")}
-          </dl>
-        </section>
-      `).join("")}
+      ${infoRows(e).map(group=>`<section class="infobox-section">
+        <h3>${esc(group.title)}</h3><dl>
+          ${group.rows.map(([label,path,lines])=>`<div class="infobox-row"><dt>${esc(label)}</dt><dd>${renderEditable(getPath(e,path),path,e,{lines,cls:"infobox-direct-edit"})}</dd></div>`).join("")}
+        </dl>
+      </section>`).join("")}
     </aside>`;
   }
 
-  function renderTextValue(value,e){
-    if(Array.isArray(value)){
-      return `<ul class="character-bullet-list">${value.map(v=>{
-        const text = typeof v==="string" ? v : (v?.text||v?.value||v?.label||"");
-        return `<li>${linkifyText(text,e.id)}</li>`;
-      }).join("")}</ul>`;
-    }
-    if(value && typeof value==="object"){
-      const rows=normalizeRows(value);
-      return rows.length
-        ? `<table class="character-data-table">${rows.map(r=>`<tr><th>${esc(r.label)}</th><td>${linkifyText(String(r.value ?? "—"),e.id)}</td></tr>`).join("")}</table>`
-        : `<div class="empty">—</div>`;
-    }
-    return `<div class="character-prose">${linkifyText(String(value||"—"),e.id)}</div>`;
+  function mediaKind(file){
+    const name=(file?.name||"").toLowerCase();
+    const type=(file?.type||"").toLowerCase();
+    if(type.startsWith("image/") || /\\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(name)) return "image";
+    if(type.startsWith("video/") || /\\.(mp4|webm|ogv|ogg|mov|m4v)$/i.test(name)) return "video";
+    return "";
   }
 
-  function characterProfileBlocks(e){
-    const c=characterData(e);
-    const p=c.profile || e.profile || {};
-    const blocks=[
-      ["Personalidad", p.personality || p.personalityCore || e.personality],
-      ["Psicología", p.psychology || p.innerWorld || p.conflicts || e.conflicts],
-      ["Habilidades y conocimientos", p.capabilities || p.skills || e.capabilities],
-      ["Debilidades y limitaciones", p.weaknesses || p.limitations || e.limitations],
-      ["Motivaciones", p.motivations || e.motivations],
-      ["Costumbres y hábitos", p.customs || p.habits || e.habits],
-      ["Gustos e intereses", p.tastes || p.interests || e.interests]
-    ];
-    return blocks.filter(([,value])=>{
-      if(!value) return false;
-      if(typeof value==="object" && !Array.isArray(value)) return Object.keys(value).length>0;
-      if(Array.isArray(value)) return value.length>0;
-      return String(value).trim().length>0;
+  function readFileDataURL(file){
+    return new Promise((resolve,reject)=>{
+      const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(file);
     });
+  }
+
+  function readMediaDimensions(src,kind){
+    return new Promise(resolve=>{
+      if(kind==="image"){
+        const img=new Image();
+        img.onload=()=>resolve({width:img.naturalWidth||0,height:img.naturalHeight||0});
+        img.onerror=()=>resolve({width:0,height:0});img.src=src;
+      }else{
+        const v=document.createElement("video");
+        v.preload="metadata";
+        v.onloadedmetadata=()=>resolve({width:v.videoWidth||0,height:v.videoHeight||0});
+        v.onerror=()=>resolve({width:0,height:0});v.src=src;
+      }
+    });
+  }
+
+  async function chooseMedia(){
+    const file=await new Promise(resolve=>{
+      const input=document.createElement("input");
+      input.type="file";
+      input.accept="image/*,video/mp4,video/webm,video/ogg,.gif,.mov,.m4v";
+      input.onchange=()=>resolve(input.files?.[0]||null);
+      input.click();
+    });
+    if(!file) return null;
+    const kind=mediaKind(file);
+    if(!kind){alert("Ese archivo no es una imagen, GIF o video compatible.");return null}
+    const src=await readFileDataURL(file);
+    const dims=await readMediaDimensions(src,kind);
+    return {
+      id:`media-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+      kind,src,name:file.name,width:dims.width,height:dims.height,
+      position:"center",size:kind==="video"?65:50,caption:""
+    };
+  }
+
+  function mediaRange(item,position){
+    const w=Number(item.width)||1,h=Number(item.height)||1,aspect=w/h;
+    if(position==="center"){
+      if(aspect<.65) return [25,42];
+      if(aspect<.85) return [28,48];
+      if(aspect<=1.25) return [34,62];
+      if(aspect<=2.2) return [44,78];
+      return [55,90];
+    }
+    if(aspect>2.2) return null;
+    if(aspect<.65) return [20,30];
+    if(aspect<.85) return [22,34];
+    if(aspect<=1.25) return [25,42];
+    return [30,45];
+  }
+
+  function renderMediaElement(item){
+    if(!item?.src) return `<div class="gallery-placeholder">${icon("personajes")}</div>`;
+    if(item.kind==="video") return `<video src="${esc(item.src)}" controls preload="metadata"></video>`;
+    return `<img src="${esc(item.src)}" alt="">`;
+  }
+
+  function renderEmbeddedMedia(media,path,e){
+    return toArray(media).map((item,i)=>{
+      const pos=item.position||"center";
+      const size=Number(item.size)||50;
+      return `<figure class="embedded-media media-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%">
+        <div class="embedded-media-frame">${renderMediaElement(item)}</div>
+        <div class="media-controls">
+          <button class="media-pos ${pos==="left"?"active":""}" data-media-position="left" title="Izquierda">←</button>
+          <button class="media-pos ${pos==="center"?"active":""}" data-media-position="center" title="Centro">•</button>
+          <button class="media-pos ${pos==="right"?"active":""}" data-media-position="right" title="Derecha">→</button>
+          <input class="media-size" type="range" value="${size}" aria-label="Tamaño">
+          <button class="media-remove" data-media-remove title="Quitar">×</button>
+        </div>
+        ${renderEditable(item.caption||"",`${path}.${i}.caption`,e,{cls:"media-caption",placeholder:"Pie opcional"})}
+      </figure>`;
+    }).join("");
+  }
+
+  function richSection(e,{title,path,mediaPath,titlePath="",removeAction="",addMedia=true}){
+    const value=getPath(e,path)||"";
+    const media=getPath(e,mediaPath)||[];
+    return `<section class="character-section media-aware-block">
+      <div class="section-title-row">
+        ${titlePath?`<h2 class="editable-heading">${renderEditable(title,titlePath,e,{cls:"heading-editor",placeholder:"Título"})}</h2>`:`<h2>${esc(title)}</h2>`}
+        ${removeAction?`<button class="section-remove" ${removeAction}>×</button>`:""}
+      </div>
+      <div class="rich-content-flow">
+        ${renderEmbeddedMedia(media,mediaPath,e)}
+        ${renderEditable(value,path,e,{cls:"character-prose editable-long-text",placeholder:"—"})}
+      </div>
+      ${addMedia?`<button class="inline-add-media" data-add-media="${esc(mediaPath)}">＋ Multimedia</button>`:""}
+    </section>`;
   }
 
   function renderCharacterProfile(e){
-    const c=characterData(e);
-    const intro = c.introduction || c.summary || e.summary || "";
-    const quote = c.featuredQuote || e.featuredQuote || null;
-    const blocks=characterProfileBlocks(e);
-
+    const c=normalizeInfo(e);
+    c.introMedia ||= [];
     return `<div class="character-content-stack">
-      <section class="character-intro-card">
-        <div class="intro-kicker">Perfil</div>
-        <div class="character-prose">${intro ? linkifyText(intro,e.id) : "Sin introducción todavía."}</div>
+      <section class="character-intro-card media-aware-block">
+        <div class="rich-content-flow">
+          ${renderEmbeddedMedia(c.introMedia,"character.introMedia",e)}
+          ${renderEditable(e.summary||"","summary",e,{cls:"character-prose editable-long-text",placeholder:"—"})}
+        </div>
+        <button class="inline-add-media" data-add-media="character.introMedia">＋ Multimedia</button>
       </section>
-
-      ${quote ? `<figure class="featured-quote">
-        <blockquote>${esc(typeof quote==="string" ? quote : (quote.text||""))}</blockquote>
-        ${typeof quote==="object" && quote.context ? `<figcaption>${esc(quote.context)}</figcaption>` : ""}
-      </figure>` : ""}
-
-      ${blocks.map(([title,value])=>`
-        <section class="character-section profile-block">
-          <h2>${esc(title)}</h2>
-          ${renderTextValue(value,e)}
-        </section>
-      `).join("")}
-
-      ${!blocks.length ? `<section class="character-section"><div class="empty">Sin información de perfil todavía.</div></section>` : ""}
-    </div>`;
-  }
-
-  function appearanceData(e){
-    const c=characterData(e);
-    const a=c.appearanceTab || c.appearanceSection || c.appearancePage || {};
-    const rows = [
-      ["Aspecto general", a.general || c.appearanceLong || e.appearance],
-      ["Ropa", a.clothing || a.clothes],
-      ["Equipo", a.equipment || a.gear],
-      ["Armas", a.weapons],
-      ["Rasgos distintivos", a.distinctive || a.features]
-    ].filter(([,value])=>{
-      if(!value) return false;
-      if(typeof value==="object" && !Array.isArray(value)) return Object.keys(value).length>0;
-      if(Array.isArray(value)) return value.length>0;
-      return String(value).trim().length>0;
-    });
-
-    const media = toArray(a.media || a.images || a.gallery).map(item=>{
-      if(typeof item==="string") return {url:item,title:"",caption:""};
-      return {
-        url:item.url || item.src || "",
-        title:item.title || "",
-        caption:item.caption || item.note || ""
-      };
-    }).filter(x=>x.url || x.title || x.caption);
-
-    return {rows,media};
-  }
-
-  function renderAppearanceMedia(media){
-    if(!media.length) return "";
-    return `<div class="appearance-media-grid">
-      ${media.map(item=>`
-        <figure class="appearance-media-card">
-          ${item.url
-            ? `<img src="${esc(item.url)}" alt="">`
-            : `<div class="gallery-placeholder">${icon("personajes")}</div>`}
-          ${(item.title || item.caption) ? `<figcaption>
-            ${item.title ? `<strong>${esc(item.title)}</strong>` : ""}
-            ${item.caption ? `<small>${esc(item.caption)}</small>` : ""}
-          </figcaption>` : ""}
-        </figure>
-      `).join("")}
+      ${PROFILE_FIELDS.map(([key,label])=>{
+        c.profileMedia[key] ||= [];
+        return richSection(e,{title:label,path:`character.profile.${key}`,mediaPath:`character.profileMedia.${key}`});
+      }).join("")}
     </div>`;
   }
 
   function renderCharacterAppearance(e){
-    const {rows,media} = appearanceData(e);
-    if(!rows.length && !media.length){
-      return `<section class="character-section"><h2>Apariencia</h2><div class="empty">Sin información de apariencia todavía.</div></section>`;
-    }
-
+    const c=normalizeInfo(e);
     return `<div class="character-content-stack">
-      ${rows.map(([title,value])=>`
-        <section class="character-section">
-          <h2>${esc(title)}</h2>
-          ${renderTextValue(value,e)}
-        </section>
-      `).join("")}
-      ${media.length ? `<section class="character-section">
-        <h2>Apoyo visual</h2>
-        ${renderAppearanceMedia(media)}
-      </section>` : ""}
+      ${APPEARANCE_FIELDS.map(([key,label])=>{
+        c.appearanceMedia[key] ||= [];
+        return richSection(e,{title:label,path:`character.appearanceTab.${key}`,mediaPath:`character.appearanceMedia.${key}`});
+      }).join("")}
     </div>`;
-  }
-
-  function characterHistorySections(e){
-    const c=characterData(e);
-    const raw=c.history || c.historySections || e.historySections || e.biography || [];
-    if(typeof raw==="string") return [{title:"Historia",body:raw,note:""}];
-    if(Array.isArray(raw)){
-      return raw.map((s,i)=>{
-        if(typeof s==="string") return {title:`Etapa ${i+1}`,body:s,note:""};
-        return {
-          title:s.title || s.label || `Etapa ${i+1}`,
-          body:s.body || s.text || s.content || "",
-          note:s.note || ""
-        };
-      }).filter(s=>s.body);
-    }
-    if(raw && typeof raw==="object"){
-      return Object.entries(raw).map(([title,body])=>({title,body,note:""})).filter(s=>s.body);
-    }
-    return [];
   }
 
   function renderCharacterHistory(e){
-    const sections=characterHistorySections(e);
-    if(!sections.length){
-      return `<section class="character-section"><h2>Historia</h2><div class="empty">Sin historia organizada todavía.</div></section>`;
-    }
-
-    return `<article class="character-history">
-      ${sections.map(s=>`
-        <section class="history-section">
-          <h2>${esc(s.title)}</h2>
-          ${s.note ? `<div class="history-kicker">${esc(s.note)}</div>` : ""}
-          <div class="character-prose">${linkifyText(s.body,e.id)}</div>
-        </section>
-      `).join("")}
-    </article>`;
-  }
-
-  function normalizeCharacterRelations(e){
-    const c=characterData(e);
-    const rel=c.relationships || c.relations || {};
-    const groups=[];
-
-    const normalize=(items,defaultType="Vínculo",groupTitle="Lazo")=>toArray(items).map((item,idx)=>{
-      if(typeof item==="string"){
-        const target=entities.find(x=>x.id===item || x.masterTag===item || x.title===item);
-        return target ? {target,type:defaultType,note:"",symbol:"",groupTitle,anchor:`${groupTitle}-${target.id}-${idx}`} : null;
-      }
-      const id=item.targetId || item.id || item.entityId || item.target;
-      const target=entities.find(x=>x.id===id || x.masterTag===id || x.title===id);
-      return target ? {
-        target,
-        type:item.type || item.role || item.label || defaultType,
-        note:item.note || item.description || item.text || "",
-        symbol:item.symbol || "",
-        groupTitle,
-        anchor:`${groupTitle}-${target.id}-${idx}`.replace(/[^a-zA-Z0-9_-]+/g,"-")
-      } : null;
-    }).filter(Boolean);
-
-    if(Array.isArray(rel)){
-      groups.push({title:"Lazos",items:normalize(rel,"Lazo","Lazos")});
-    }else if(rel && typeof rel==="object"){
-      const map=[
-        ["Familia", rel.family],
-        ["Alianzas y afinidades", rel.personal || rel.important || rel.alliances || rel.friends],
-        ["Parejas", rel.romance || rel.partners],
-        ["Enemistades y rivalidades", rel.enemies || rel.rivals],
-        ["Otros lazos", rel.other]
-      ];
-      for(const [title,items] of map){
-        const normalized=normalize(items,"Lazo",title);
-        if(normalized.length) groups.push({title,items:normalized});
-      }
-    }
-
-    if(!groups.length){
-      const generic = relationCandidates(e).map((r,idx)=>({
-        ...r,
-        symbol:r.symbol || "",
-        groupTitle:"Lazos",
-        anchor:`Lazos-${r.target.id}-${idx}`
-      }));
-      if(generic.length) groups.push({title:"Lazos",items:generic});
-    }
-    return groups;
-  }
-
-  function renderLazoOverview(groups){
-    const flat = groups.flatMap(g=>g.items);
-    if(!flat.length) return "";
-    return `<section class="character-section">
-      <h2>Mapa rápido de lazos</h2>
-      <div class="bond-jump-grid">
-        ${flat.map(r=>`
-          <a class="bond-jump-card" href="#${esc(r.anchor)}" data-bond-jump="${esc(r.anchor)}">
-            <span class="bond-jump-symbol ${r.symbol ? "has-manual-symbol" : ""}">${r.symbol ? esc(r.symbol) : icon(r.target.category)}</span>
-            <span class="bond-jump-copy">
-              <strong>${esc(r.target.title)}</strong>
-              <small>${esc(r.type || r.groupTitle || "Lazo")}</small>
-            </span>
-            <span class="relation-arrow">↘</span>
-          </a>
-        `).join("")}
-      </div>
-    </section>`;
-  }
-
-  function renderCharacterBonds(e){
-    const groups=normalizeCharacterRelations(e);
-    if(!groups.length){
-      return `<section class="character-section"><h2>Lazos</h2><div class="empty">Sin lazos registrados todavía.</div></section>`;
-    }
-
+    const c=normalizeInfo(e);
     return `<div class="character-content-stack">
-      ${renderLazoOverview(groups)}
-      ${groups.map(group=>`
-        <section class="character-section">
-          <h2>${esc(group.title)}</h2>
-          <div class="bond-detail-stack">
-            ${group.items.map(r=>`
-              <article class="bond-detail-card" id="${esc(r.anchor)}">
-                <div class="bond-detail-head">
-                  <span class="bond-detail-symbol ${r.symbol ? "has-manual-symbol" : ""}">${r.symbol ? esc(r.symbol) : icon(r.target.category)}</span>
-                  <div class="bond-detail-title">
-                    <button class="text-button bond-name-link" data-open-related="${r.target.id}">${esc(r.target.title)}</button>
-                    <small>${esc(r.type || "Lazo")}</small>
-                  </div>
-                </div>
-                <div class="character-prose">${r.note ? linkifyText(r.note,e.id) : "Sin desarrollo todavía."}</div>
-              </article>
-            `).join("")}
-          </div>
-        </section>
-      `).join("")}
+      ${c.history.map((s,i)=>{
+        if(typeof s==="string") c.history[i]={title:`Apartado ${i+1}`,body:s,media:[]};
+        c.history[i].media ||= [];
+        return richSection(e,{title:c.history[i].title||`Apartado ${i+1}`,titlePath:`character.history.${i}.title`,path:`character.history.${i}.body`,mediaPath:`character.history.${i}.media`,removeAction:`data-remove-history="${i}"`});
+      }).join("")}
+      <button class="section-add" data-add-history>＋ Apartado</button>
     </div>`;
   }
 
-  function characterGallery(e){
-    const c=characterData(e);
-    const raw=[...toArray(c.gallery),...toArray(e.gallery),...toArray(e.media)];
-    const seen=new Set(), items=[];
+  function relationTarget(item){
+    const id=item?.targetId||item?.id||item?.target;
+    return entities.find(x=>x.id===id||x.masterTag===id||x.title===id) || null;
+  }
 
-    for(const item of raw){
-      const normalized=typeof item==="string"
-        ? {url:item,title:"",caption:""}
-        : {
-            url:item.url||item.src||item.href||"",
-            title:item.title||item.name||"",
-            caption:item.caption||item.note||item.description||""
-          };
-      const key=`${normalized.url}|${normalized.title}|${normalized.caption}`;
-      if(!seen.has(key)){seen.add(key);items.push(normalized)}
-    }
-    return items;
+  function renderCharacterBonds(e){
+    const c=normalizeInfo(e);
+    return `<div class="character-content-stack">
+      ${BOND_GROUPS.map(([key,label])=>`<section class="character-section">
+        <div class="section-title-row"><h2>${label}</h2><button class="bond-add" data-add-bond="${key}">＋ Lazo</button></div>
+        <div class="bond-detail-stack">
+          ${c.relationships[key].map((item,i)=>{
+            const target=relationTarget(item);
+            return `<article class="bond-detail-card">
+              <div class="bond-detail-head">
+                <div class="bond-detail-title">
+                  ${target?`<button class="text-button bond-name-link" data-open-related="${target.id}">${esc(target.title)}</button>`:`<strong>Entidad no encontrada</strong>`}
+                  ${renderEditable(item.type||"",`character.relationships.${key}.${i}.type`,e,{cls:"bond-type-edit",placeholder:"Aclaración opcional"})}
+                </div>
+                <button class="bond-remove" data-remove-bond="${key}" data-bond-index="${i}">×</button>
+              </div>
+              ${renderEditable(item.note||"",`character.relationships.${key}.${i}.note`,e,{cls:"character-prose bond-note-edit",placeholder:"Texto opcional"})}
+            </article>`;
+          }).join("") || `<div class="empty">—</div>`}
+        </div>
+      </section>`).join("")}
+    </div>`;
   }
 
   function renderCharacterGallery(e){
-    const items=characterGallery(e);
-    if(!items.length){
-      return `<section class="character-section"><h2>Galería</h2><div class="empty">Sin imágenes complementarias todavía.</div></section>`;
-    }
-
+    const c=normalizeInfo(e);
     return `<section class="character-section gallery-section">
-      <h2>Galería</h2>
+      <div class="section-title-row"><h2>Galería</h2><button class="gallery-add" data-add-gallery>＋ Multimedia</button></div>
       <div class="character-gallery-grid">
-        ${items.map(item=>`
-          <article class="character-gallery-card">
-            ${item.url
-              ? `<img src="${esc(item.url)}" alt="">`
-              : `<div class="gallery-placeholder">${icon("personajes")}</div>`}
-            ${(item.title||item.caption) ? `<div class="gallery-caption">
-              ${item.title ? `<strong>${esc(item.title)}</strong>` : ""}
-              ${item.caption ? `<small>${esc(item.caption)}</small>` : ""}
-            </div>` : ""}
-          </article>
-        `).join("")}
+        ${c.gallery.map((item,i)=>`<article class="character-gallery-card">
+          ${renderMediaElement(item)}
+          ${renderEditable(item.caption||"",`character.gallery.${i}.caption`,e,{cls:"gallery-caption direct-gallery-caption",placeholder:"Pie opcional"})}
+          <button class="gallery-remove" data-remove-gallery="${i}">×</button>
+        </article>`).join("") || `<div class="empty">—</div>`}
       </div>
     </section>`;
   }
 
   function participationCategories(){
-    return [
-      ["arcos","Arcos"],
-      ["eventos","Eventos"],
-      ["grupos","Grupos"],
-      ["batallas","Batallas"],
-      ["lugares","Lugares"],
-      ["rutas","Rutas"],
-      ["barcos","Barcos"]
-    ];
+    return [["arcos","Arcos"],["eventos","Eventos"],["grupos","Grupos"],["batallas","Batallas"],["lugares","Lugares"],["rutas","Rutas"],["barcos","Barcos"]];
+  }
+
+  function collectCharacterText(e){
+    const clone=JSON.parse(JSON.stringify(e));
+    function walk(v,out=[]){
+      if(typeof v==="string") out.push(v);
+      else if(Array.isArray(v)) v.forEach(x=>walk(x,out));
+      else if(v && typeof v==="object") Object.entries(v).forEach(([k,x])=>{if(k!=="src" && k!=="dataUrl") walk(x,out)});
+      return out;
+    }
+    return walk(clone,[]).join(" ").toLocaleLowerCase("es");
   }
 
   function findCharacterParticipation(e){
-    const c=characterData(e);
-    const explicit=c.participation || e.participation || {};
-    const bucket=new Map(participationCategories().map(([id])=>[id,new Map()]));
-
-    const add=(target,note="")=>{
-      if(!target || !bucket.has(target.category)) return;
-      bucket.get(target.category).set(target.id,{target,note});
-    };
-
-    if(explicit && typeof explicit==="object" && !Array.isArray(explicit)){
-      for(const [cat,items] of Object.entries(explicit)){
-        for(const item of toArray(items)){
-          const id=typeof item==="string" ? item : (item.targetId||item.id||item.entityId);
-          const target=entities.find(x=>x.id===id||x.masterTag===id||x.title===id);
-          add(target, typeof item==="object" ? (item.note||item.role||"") : "");
-        }
-      }
-    }
-
-    const needles=entityTerms(e).map(t=>t.toLocaleLowerCase("es")).filter(t=>t.length>=3);
-    for(const other of entities){
-      if(other.id===e.id || !bucket.has(other.category)) continue;
-      const fields=[
-        other.summary,other.subtitle,
-        JSON.stringify(other.relations||other.relationships||other.related||[]),
-        JSON.stringify(other.members||other.participants||other.crew||other.forces||[]),
-        JSON.stringify(other.sections||other.timeline||[])
-      ].filter(Boolean).join(" ").toLocaleLowerCase("es");
-
-      if(needles.some(n=>fields.includes(n))) add(other,"Referencia automática");
-    }
-
-    return participationCategories().map(([cat,label])=>({
-      category:cat,
-      label,
-      items:[...bucket.get(cat).values()]
-    })).filter(group=>group.items.length);
+    const hay=collectCharacterText(e);
+    return participationCategories().map(([category,label])=>{
+      const items=entities.filter(target=>{
+        if(target.id===e.id || target.category!==category) return false;
+        return entityTerms(target).some(term=>String(term).length>=3 && hay.includes(String(term).toLocaleLowerCase("es")));
+      });
+      return {category,label,items};
+    }).filter(g=>g.items.length);
   }
 
   function renderCharacterParticipation(e){
     const groups=findCharacterParticipation(e);
-    if(!groups.length){
-      return `<section class="character-section"><h2>Participación</h2><div class="empty">Todavía no hay referencias cruzadas suficientes para construir esta sección.</div></section>`;
-    }
-
-    return `<div class="character-content-stack">
-      ${groups.map(group=>`
-        <section class="character-section">
-          <h2>${esc(group.label)}</h2>
-          <div class="participation-grid">
-            ${group.items.map(({target,note})=>`
-              <button class="participation-card" data-open-related="${target.id}">
-                <span class="participation-icon">${icon(target.category)}</span>
-                <span>
-                  <strong>${esc(target.title)}</strong>
-                  ${note ? `<small>${esc(note)}</small>` : ""}
-                </span>
-              </button>
-            `).join("")}
-          </div>
-        </section>
-      `).join("")}
-    </div>`;
-  }
-
-  function researchData(e){
-    const c=characterData(e);
-    return c.research || e.research || {};
+    if(!groups.length) return `<section class="character-section"><h2>Participación</h2><div class="empty">—</div></section>`;
+    return `<div class="character-content-stack">${groups.map(group=>`<section class="character-section"><h2>${esc(group.label)}</h2><div class="participation-grid">${group.items.map(target=>`<button class="participation-card" data-open-related="${target.id}"><span class="participation-icon">${icon(target.category)}</span><span><strong>${esc(target.title)}</strong></span></button>`).join("")}</div></section>`).join("")}</div>`;
   }
 
   function renderCharacterResearch(e){
-    const r=researchData(e);
-    const kind = r.kind || r.characterType || "—";
-    const workStatus = r.workStatus || r.progress || "—";
-    const sources = toArray(r.sources).filter(s=>s && (s.url || s.title));
-    const pending = toArray(r.pending || r.todo);
-    const notes = toArray(r.notes);
-
+    const c=normalizeInfo(e),r=c.research;
+    r.kind ||= "Inventado";r.workStatus ||= "Nuevo";r.sources ??= "";r.pending ??= "";r.notes ??= "";
+    if(Array.isArray(r.sources)) r.sources=r.sources.map(x=>typeof x==="string"?x:(x.url||x.title||"")).join("\n");
+    if(Array.isArray(r.pending)) r.pending=r.pending.map(x=>typeof x==="string"?x:(x.text||"")).join("\n");
+    if(Array.isArray(r.notes)) r.notes=r.notes.map(x=>typeof x==="string"?x:(x.text||x.note||"")).join("\n");
     return `<div class="character-content-stack">
-      <section class="character-section research-meta-grid">
-        <div class="research-meta-card">
-          <h2>Personaje</h2>
-          <div class="research-pill">${esc(kind)}</div>
-        </div>
-        <div class="research-meta-card">
-          <h2>Estado de trabajo</h2>
-          <div class="research-pill">${esc(workStatus)}</div>
-        </div>
-      </section>
-
-      <section class="character-section">
-        <h2>Fuentes</h2>
-        ${sources.length
-          ? `<div class="source-list">${sources.map(s=>`
-              <div class="source-item">
-                <strong>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>` : esc(s.title || "Fuente")}</strong>
-                ${s.note ? `<p>${esc(s.note)}</p>` : ""}
-              </div>
-            `).join("")}</div>`
-          : `<div class="empty">Sin fuentes externas registradas todavía.</div>`}
-      </section>
-
-      <section class="character-section">
-        <h2>Pendientes</h2>
-        ${pending.length
-          ? `<ul class="research-list">${pending.map(x=>`<li>${esc(typeof x==="string" ? x : (x.text||x.label||""))}</li>`).join("")}</ul>`
-          : `<div class="empty">Sin pendientes registrados.</div>`}
-      </section>
-
-      <section class="character-section">
-        <h2>Notas</h2>
-        ${notes.length
-          ? `<div class="character-prose">${notes.map(n=>`<p>${linkifyText(typeof n==="string" ? n : (n.text||n.note||""),e.id)}</p>`).join("")}</div>`
-          : `<div class="empty">Sin notas de trabajo.</div>`}
-      </section>
+      <section class="character-section research-choices"><div><h2>Personaje</h2><select data-select-path="character.research.kind"><option ${r.kind==="Inventado"?"selected":""}>Inventado</option><option ${r.kind==="Real"?"selected":""}>Real</option></select></div><div><h2>Estado de desarrollo</h2><select data-select-path="character.research.workStatus"><option ${r.workStatus==="Nuevo"?"selected":""}>Nuevo</option><option ${r.workStatus==="En desarrollo"?"selected":""}>En desarrollo</option><option ${r.workStatus==="Final"?"selected":""}>Final</option></select></div></section>
+      <section class="character-section"><h2>Fuentes</h2>${renderEditable(r.sources,"character.research.sources",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
+      <section class="character-section"><h2>Pendientes</h2>${renderEditable(r.pending,"character.research.pending",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
+      <section class="character-section"><h2>Notas</h2>${renderEditable(r.notes,"character.research.notes",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
     </div>`;
   }
 
@@ -1372,78 +1169,123 @@
     return renderCharacterProfile(e);
   }
 
-  function wireCharacterTab(e){
-    wireEntityLinks();
-    $$('[data-bond-jump]').forEach(link=>{
-      link.onclick=(ev)=>{
-        ev.preventDefault();
-        const anchor = link.dataset.bondJump;
-        const node = document.getElementById(anchor);
-        if(node) node.scrollIntoView({behavior:'smooth',block:'start'});
-      };
+  async function addMediaAtPath(e,path){
+    const item=await chooseMedia();if(!item) return;
+    let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
+    arr.push(item);await saveEntityDirect(e);refreshCharacterTab(e);
+  }
+
+  function rerenderMediaBlock(block,item){
+    block.classList.remove("media-left","media-center","media-right");
+    block.classList.add(`media-${item.position||"center"}`);
+    block.dataset.position=item.position||"center";
+    block.style.setProperty("--media-size",`${item.size||50}%`);
+  }
+
+  function applyMediaRules(){
+    $$('[data-media-block]').forEach(block=>{
+      const frame=block.querySelector('.embedded-media-frame');
+      const range=block.querySelector('.media-size');
+      const parent=block.closest('.media-aware-block');
+      const text=parent?.querySelector('.editable-long-text');
+      if(!frame||!range||!parent) return;
+      const idx=Number(block.dataset.mediaIndex),path=block.dataset.mediaPath;
+      const e=entities.find(x=>x.id===currentView.id);if(!e)return;
+      const item=getPath(e,`${path}.${idx}`);if(!item)return;
+      const width=parent.clientWidth||700;
+      let effective=item.position||"center";
+      let limits=mediaRange(item,effective);
+      const tooLittleText=(text?.innerText||"").trim().length<180;
+      if(effective!=="center" && (width<720 || tooLittleText || !limits)) effective="center";
+      limits=mediaRange(item,effective)||[35,70];
+      if(effective!=="center"){
+        const minText=Math.max(300,width*.38);
+        const sideMax=Math.max(0,((width-minText-24)/width)*100);
+        limits[1]=Math.min(limits[1],sideMax);
+        if(limits[1]<limits[0]){effective="center";limits=mediaRange(item,"center")||[35,70]}
+      }
+      if(item.width){
+        const intrinsicMax=(item.width/width)*100;
+        limits[1]=Math.min(limits[1],Math.max(limits[0],intrinsicMax));
+      }
+      if(item.width&&item.height){
+        const aspect=item.width/item.height;
+        const heightMax=(window.innerHeight*.70*aspect/width)*100;
+        limits[1]=Math.min(limits[1],Math.max(limits[0],heightMax));
+      }
+      const val=Math.max(limits[0],Math.min(Number(item.size)||50,limits[1]));
+      range.min=Math.round(limits[0]);range.max=Math.max(Math.round(limits[0]),Math.round(limits[1]));range.value=Math.round(val);
+      block.style.setProperty("--media-size",`${val}%`);
+      block.classList.remove("effective-left","effective-center","effective-right");
+      block.classList.add(`effective-${effective}`);
     });
   }
 
-  function showCharacterEntity(e,tab="profile"){
-    currentView={type:"entity",id:e.id};
-    setActive("");
+  function resolveEntityInput(input,currentId){
+    const q=String(input||"").trim().toLocaleLowerCase("es");if(!q)return null;
+    const matches=entities.filter(x=>x.id!==currentId && [x.title,x.masterTag,...toArray(x.aliases)].some(v=>String(v||"").toLocaleLowerCase("es")===q));
+    if(matches.length<=1) return matches[0]||null;
+    const answer=prompt(`Coincidencias:\n${matches.map((x,i)=>`${i+1}. ${x.title} [${categoryName(x.category)}]`).join("\n")}\n\nNúmero:`);
+    const n=Number(answer);return matches[n-1]||null;
+  }
 
-    const validTabs=CHARACTER_TABS.map(x=>x[0]);
-    let active=validTabs.includes(tab) ? tab : "profile";
+  function refreshCharacterTab(e){
+    const active=$('.character-tab.active')?.dataset.characterTab || 'profile';
+    $('#characterTabPanel').innerHTML=renderCharacterTab(e,active);
+    wireCharacterTab(e);
+  }
 
-    $("#view").innerHTML=`
-      <div class="character-page">
-        <div class="page-head">
-          ${backButton()}
-          <h1 class="page-title">Personajes</h1>
-        </div>
+  function wireCharacterTab(e){
+    wireEntityLinks();
+    wireDirectEditors(e);
 
-        <header class="character-titlebar">
-          <div class="character-title-copy">
-            <div class="entity-kind">Personaje</div>
-            <h1>${esc(e.title)}</h1>
-            ${e.subtitle ? `<div class="character-subtitle">${esc(e.subtitle)}</div>` : ""}
-          </div>
-        </header>
-
-        <div class="character-wiki-layout">
-          ${renderCharacterInfobox(e)}
-
-          <main class="character-article">
-            <nav class="character-tabs" aria-label="Secciones del personaje">
-              ${CHARACTER_TABS.map(([id,label,iconName])=>`
-                <button class="character-tab ${id===active?"active":""}" data-character-tab="${id}">
-                  <span>${icon(iconName)}</span>${esc(label)}
-                </button>
-              `).join("")}
-            </nav>
-
-            <section id="characterTabPanel" class="character-tab-panel">
-              ${renderCharacterTab(e,active)}
-            </section>
-          </main>
-        </div>
-
-        ${renderTechnical(e)}
-      </div>
-    `;
-
-    $("#pageBack").onclick=()=>showCategory("personajes");
-
-    $$('[data-character-tab]').forEach(btn=>{
-      btn.onclick=()=>{
-        active=btn.dataset.characterTab;
-        $$(".character-tab").forEach(b=>b.classList.toggle("active",b===btn));
-        $("#characterTabPanel").innerHTML=renderCharacterTab(e,active);
-        wireCharacterTab(e);
-      };
+    $$('[data-add-media]').forEach(btn=>btn.onclick=()=>addMediaAtPath(e,btn.dataset.addMedia));
+    $$('[data-media-position]').forEach(btn=>btn.onclick=async()=>{
+      const block=btn.closest('[data-media-block]');
+      const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
+      item.position=btn.dataset.mediaPosition;await saveEntityDirect(e);refreshCharacterTab(e);
+    });
+    $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{
+      const block=btn.closest('[data-media-block]');const arr=getPath(e,block.dataset.mediaPath)||[];
+      arr.splice(Number(block.dataset.mediaIndex),1);await saveEntityDirect(e);refreshCharacterTab(e);
+    });
+    $$('.media-size').forEach(range=>{
+      range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};
+      range.onchange=async()=>{const block=range.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);applyMediaRules()};
     });
 
-    $("#copyMasterTag").onclick=()=>copyText(e.masterTag||e.id);
-    $("#copyInternalLink").onclick=()=>copyText(`[[${e.masterTag||e.id}|${e.title}]]`);
-    wireCharacterTab(e);
+    $('[data-add-history]')?.addEventListener('click',async()=>{normalizeInfo(e).history.push({title:'Nuevo apartado',body:'',media:[]});await saveEntityDirect(e);refreshCharacterTab(e)});
+    $$('[data-remove-history]').forEach(btn=>btn.onclick=async()=>{normalizeInfo(e).history.splice(Number(btn.dataset.removeHistory),1);await saveEntityDirect(e);refreshCharacterTab(e)});
 
-    history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
+    $$('[data-add-bond]').forEach(btn=>btn.onclick=async()=>{
+      const name=prompt('Nombre, alias o etiqueta maestra del personaje/entidad:');if(!name)return;
+      const target=resolveEntityInput(name,e.id);if(!target){alert('No encontré esa entidad.');return}
+      normalizeInfo(e).relationships[btn.dataset.addBond].push({targetId:target.id,type:'',note:''});await saveEntityDirect(e);refreshCharacterTab(e);
+    });
+    $$('[data-remove-bond]').forEach(btn=>btn.onclick=async()=>{normalizeInfo(e).relationships[btn.dataset.removeBond].splice(Number(btn.dataset.bondIndex),1);await saveEntityDirect(e);refreshCharacterTab(e)});
+
+    $('[data-add-gallery]')?.addEventListener('click',async()=>{const item=await chooseMedia();if(!item)return;normalizeInfo(e).gallery.push(item);await saveEntityDirect(e);refreshCharacterTab(e)});
+    $$('[data-remove-gallery]').forEach(btn=>btn.onclick=async()=>{normalizeInfo(e).gallery.splice(Number(btn.dataset.removeGallery),1);await saveEntityDirect(e);refreshCharacterTab(e)});
+
+    $$('[data-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.selectPath,sel.value);await saveEntityDirect(e)});
+
+    requestAnimationFrame(()=>requestAnimationFrame(applyMediaRules));
+  }
+
+  function showCharacterEntity(e,tab="profile"){
+    currentView={type:"entity",id:e.id};setActive("");normalizeInfo(e);
+    const validTabs=CHARACTER_TABS.map(x=>x[0]);let active=validTabs.includes(tab)?tab:"profile";
+    $("#view").innerHTML=`<div class="character-page">
+      <div class="page-head">${backButton()}<h1 class="page-title">Personajes</h1></div>
+      <header class="character-titlebar"><div class="character-title-copy"><h1>${esc(e.title)}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
+      <div class="character-wiki-layout">${renderCharacterInfobox(e)}<main class="character-article">
+        <nav class="character-tabs" aria-label="Secciones del personaje">${CHARACTER_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-character-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
+        <section id="characterTabPanel" class="character-tab-panel">${renderCharacterTab(e,active)}</section>
+      </main></div>${renderTechnical(e)}</div>`;
+    $("#pageBack").onclick=()=>showCategory("personajes");
+    $$('[data-character-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.characterTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderCharacterTab(e,active);wireCharacterTab(e)});
+    $("#copyMasterTag").onclick=()=>copyText(e.masterTag||e.id);$("#copyInternalLink").onclick=()=>copyText(`[[${e.masterTag||e.id}|${e.title}]]`);
+    wireDirectEditors(e);wireCharacterTab(e);history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
   }
 
   function showEntity(id,tab="overview"){
@@ -1721,6 +1563,9 @@
     buildNav();
     hydrateStaticIcons();
     restoreSidebar();
+    window.addEventListener("resize",()=>{
+      if(currentView.type==="entity" && document.querySelector(".character-page")) applyMediaRules();
+    });
 
     await openDB();
     entities=await ensureSeed();
