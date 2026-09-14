@@ -68,3 +68,10 @@ Consulta `PERSONAJES_TANDA0.md`.
 - Ahora se refrescan únicamente las entidades `demo-*` al iniciar.
 - Los datos reales del usuario no se sobrescriben.
 - Se agregaron `?v=a62` a CSS, JavaScript y demo-data para evitar caché vieja en GitHub Pages/navegador.
+
+
+## A6.3 — Personajes / borrador 2
+- Tabla lateral fija con nacionalidad, cultura, idiomas, religión y ocupación.
+- Resumen integrado en Perfil como recuadro introductorio.
+- Pestañas: Perfil, Apariencia, Historia, Lazos, Galería, Participación, Investigación.
+- Revisión visual menos monocromática y con mezcla de vino, petróleo y dorado.

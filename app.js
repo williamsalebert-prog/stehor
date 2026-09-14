@@ -756,19 +756,18 @@
 
 
   // ============================================================
-  // PERSONAJES — TANDA 0
-  // Ficha estática tipo wiki. El autor decide toda contextualización
-  // narrativa mediante texto, paréntesis, subtítulos o relaciones.
-  // La aplicación solo organiza y automatiza referencias objetivas.
+  // PERSONAJES — BORRADOR 2
+  // Perfil, Apariencia, Historia, Lazos, Galería, Participación,
+  // Investigación. La tabla lateral es fija y compacta.
   // ============================================================
 
   const CHARACTER_TABS = [
-    ["summary","Resumen","info"],
     ["profile","Perfil","personajes"],
+    ["appearance","Apariencia","ropa"],
     ["history","Historia","historia-real"],
-    ["character-relations","Relaciones","relaciones"],
-    ["participation","Participación","arcos"],
+    ["bonds","Lazos","relaciones"],
     ["gallery","Galería","objetos"],
+    ["participation","Participación","arcos"],
     ["research","Investigación","fuentes"]
   ];
 
@@ -785,52 +784,111 @@
           label:row.label || row.name || row.title || "Dato",
           value:row.value ?? row.text ?? row.content ?? ""
         };
-      }).filter(x=>x.value!=="" && x.value!=null);
+      });
     }
     if(typeof value==="object"){
-      return Object.entries(value)
-        .filter(([,v])=>v!=="" && v!=null)
-        .map(([label,v])=>({label,value:v}));
+      return Object.entries(value).map(([label,v])=>({label,value:v}));
     }
     return [];
+  }
+
+  function textKey(str){
+    return String(str||"")
+      .toLocaleLowerCase("es")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^a-z0-9]+/g,"")
+      .trim();
+  }
+
+  function valueFromStructured(source, keys=[], labels=[]){
+    if(!source) return "";
+    if(source && typeof source==="object" && !Array.isArray(source)){
+      for(const k of keys){
+        if(source[k]!==undefined && source[k]!==null && source[k]!=="") return source[k];
+      }
+      const entries=Object.entries(source);
+      for(const [k,v] of entries){
+        const nk=textKey(k);
+        if(labels.some(l=>nk===textKey(l)) && v!==undefined && v!==null && v!=="") return v;
+      }
+    }
+    if(Array.isArray(source)){
+      for(const row of source){
+        const label = row?.label || row?.name || row?.title || "";
+        if(labels.some(l=>textKey(label)===textKey(l))){
+          const val = row?.value ?? row?.text ?? row?.content ?? "";
+          if(val!==undefined && val!==null && val!=="") return val;
+        }
+      }
+    }
+    return "";
+  }
+
+  function dash(value){
+    if(value===undefined || value===null) return "—";
+    if(Array.isArray(value)) return value.length ? value : "—";
+    if(typeof value==="string") return value.trim() ? value : "—";
+    if(typeof value==="object") return Object.keys(value).length ? value : "—";
+    return value;
+  }
+
+  function makeInfoRow(label,value){
+    return {label,value:dash(value)};
   }
 
   function characterInfoGroups(e){
     const c=characterData(e);
     const info=c.info || c.infobox || {};
-
-    const personal=normalizeRows(info.personal || c.personal || [
-      e.fullName ? {label:"Nombre completo",value:e.fullName} : null,
-      e.birth ? {label:"Nacimiento",value:e.birth} : null,
-      e.ageText ? {label:"Edad",value:e.ageText} : null,
-      e.origin ? {label:"Origen",value:e.origin} : null,
-      e.nationality ? {label:"Nacionalidad",value:e.nationality} : null
-    ].filter(Boolean));
-
-    const narrative=normalizeRows(info.narrative || c.narrative || [
-      e.firstAppearance ? {label:"Primera aparición",value:e.firstAppearance} : null,
-      e.importantRelations ? {label:"Relaciones importantes",value:e.importantRelations} : null,
-      e.status ? {label:"Estado",value:e.status} : null
-    ].filter(Boolean));
-
-    const appearance=normalizeRows(info.appearance || c.appearanceFacts || []);
+    const personal = info.personal || c.personal || {};
+    const story = info.story || info.narrative || c.narrative || {};
+    const appearance = info.appearance || c.appearanceFacts || {};
 
     return [
-      {title:"Información personal",rows:personal},
-      {title:"Información narrativa",rows:narrative},
-      {title:"Aspecto básico",rows:appearance}
-    ].filter(group=>group.rows.length);
+      {
+        title:"Información personal",
+        rows:[
+          makeInfoRow("También conocido como", valueFromStructured(personal,["aka","alsoKnownAs","aliases","nicknames"],["tambien conocido como","también conocido como","alias","apodos"]) || toArray(e.aliases)),
+          makeInfoRow("Género", valueFromStructured(personal,["gender","genre"],["género","genero"])),
+          makeInfoRow("Nacionalidad", valueFromStructured(personal,["nationality"],["nacionalidad"]) || e.nationality),
+          makeInfoRow("Cultura", valueFromStructured(personal,["culture","people"],["cultura","cultura/pueblo","pueblo"])),
+          makeInfoRow("Idiomas", valueFromStructured(personal,["languages","idiomas"],["idiomas"]) || e.languages),
+          makeInfoRow("Religión", valueFromStructured(personal,["religion"],["religión","religion"])),
+          makeInfoRow("Ocupación", valueFromStructured(personal,["occupation","job","ocupacion"],["ocupación","ocupacion","profesión","profesion","ocupación / profesión"])),
+          makeInfoRow("Nacimiento", valueFromStructured(personal,["birth","born"],["nacimiento"]) || e.birth),
+          makeInfoRow("Fallecimiento", valueFromStructured(personal,["death","died"],["fallecimiento","muerte"]) || e.death),
+          makeInfoRow("Edad", valueFromStructured(personal,["age","ageText"],["edad"]) || e.ageText),
+          makeInfoRow("Estado civil", valueFromStructured(personal,["civilStatus","maritalStatus"],["estado civil"]) || e.relationshipText)
+        ]
+      },
+      {
+        title:"En la historia",
+        rows:[
+          makeInfoRow("Primera aparición", valueFromStructured(story,["firstAppearance"],["primera aparición","primera aparicion"]) || e.firstAppearance),
+          makeInfoRow("Relaciones importantes", valueFromStructured(story,["importantRelations"],["relaciones importantes"]) || e.importantRelations)
+        ]
+      },
+      {
+        title:"Descripción física",
+        rows:[
+          makeInfoRow("Cabello", valueFromStructured(appearance,["hair"],["cabello"])),
+          makeInfoRow("Ojos", valueFromStructured(appearance,["eyes"],["ojos"])),
+          makeInfoRow("Piel", valueFromStructured(appearance,["skin"],["piel"])),
+          makeInfoRow("Complexión", valueFromStructured(appearance,["build","complexion"],["complexión","complexion"]))
+        ]
+      }
+    ];
   }
 
   function renderInfoboxValue(value,e){
     if(Array.isArray(value)){
+      if(!value.length) return "—";
       return `<ul class="infobox-simple-list">${value.map(item=>{
-        if(typeof item==="string") return `<li>${linkifyText(item,e.id)}</li>`;
-        const text=item.text ?? item.value ?? item.label ?? "";
-        return `<li>${linkifyText(String(text),e.id)}</li>`;
+        const text = typeof item==="string" ? item : (item?.text ?? item?.value ?? item?.label ?? "");
+        return `<li>${linkifyText(String(text||"—"),e.id)}</li>`;
       }).join("")}</ul>`;
     }
-    return linkifyText(String(value ?? ""),e.id);
+    return linkifyText(String(value ?? "—"),e.id);
   }
 
   function renderCharacterInfobox(e){
@@ -838,13 +896,14 @@
     const image=getImage(e);
 
     return `<aside class="character-infobox">
-      <div class="character-portrait">
-        ${image
-          ? `<img src="${esc(image)}" alt="">`
-          : `<div class="character-portrait-placeholder">${icon("personajes")}</div>`}
+      <div class="character-portrait-shell">
+        <div class="character-portrait">
+          ${image
+            ? `<img src="${esc(image)}" alt="">`
+            : `<div class="character-portrait-placeholder">${icon("personajes")}</div>`}
+        </div>
+        <div class="portrait-ornament"></div>
       </div>
-
-      <div class="character-infobox-name">${esc(e.title)}</div>
 
       ${groups.map(group=>`
         <section class="infobox-section">
@@ -862,92 +921,142 @@
     </aside>`;
   }
 
-  function characterProfileBlocks(e){
-    const c=characterData(e);
-    const p=c.profile || e.profile || {};
-    const blocks=[
-      ["Apariencia",p.appearance || e.appearance],
-      ["Personalidad",p.personality || e.personality],
-      ["Motivaciones",p.motivations || e.motivations],
-      ["Conflictos personales",p.conflicts || p.fears || e.conflicts],
-      ["Capacidades y conocimientos",p.capabilities || p.skills || e.capabilities],
-      ["Limitaciones",p.limitations || e.limitations],
-      ["Costumbres e intereses",p.habits || p.interests || e.habits]
-    ];
-    return blocks
-      .map(([title,value])=>({title,value}))
-      .filter(x=>x.value && (typeof x.value!=="object" || Object.keys(x.value).length));
-  }
-
   function renderTextValue(value,e){
     if(Array.isArray(value)){
       return `<ul class="character-bullet-list">${value.map(v=>{
-        if(typeof v==="string") return `<li>${linkifyText(v,e.id)}</li>`;
-        return `<li>${linkifyText(v.text||v.value||v.label||"",e.id)}</li>`;
+        const text = typeof v==="string" ? v : (v?.text||v?.value||v?.label||"");
+        return `<li>${linkifyText(text,e.id)}</li>`;
       }).join("")}</ul>`;
     }
     if(value && typeof value==="object"){
       const rows=normalizeRows(value);
       return rows.length
-        ? `<table class="character-data-table">${rows.map(r=>`<tr><th>${esc(r.label)}</th><td>${linkifyText(String(r.value),e.id)}</td></tr>`).join("")}</table>`
-        : "";
+        ? `<table class="character-data-table">${rows.map(r=>`<tr><th>${esc(r.label)}</th><td>${linkifyText(String(r.value ?? "—"),e.id)}</td></tr>`).join("")}</table>`
+        : `<div class="empty">—</div>`;
     }
-    return `<div class="character-prose">${linkifyText(String(value||""),e.id)}</div>`;
+    return `<div class="character-prose">${linkifyText(String(value||"—"),e.id)}</div>`;
   }
 
-  function renderCharacterSummary(e){
+  function characterProfileBlocks(e){
     const c=characterData(e);
-    const intro=c.introduction || c.summary || e.summary || "";
-    const traits=toArray(c.traits || e.traits);
-    const quote=c.featuredQuote || e.featuredQuote || null;
-    const important=relationCandidates(e).slice(0,4);
-
-    return `<div class="character-content-stack">
-      <section class="character-section">
-        <h2>Quién es</h2>
-        <div class="character-prose">${intro ? linkifyText(intro,e.id) : "Sin introducción todavía."}</div>
-      </section>
-
-      ${traits.length ? `<section class="character-section">
-        <h2>Rasgos principales</h2>
-        <div class="trait-list">${traits.map(t=>`<span>${esc(typeof t==="string"?t:(t.label||t.text||""))}</span>`).join("")}</div>
-      </section>` : ""}
-
-      ${quote ? `<figure class="featured-quote">
-        <blockquote>${esc(typeof quote==="string"?quote:(quote.text||""))}</blockquote>
-        ${typeof quote==="object" && quote.context ? `<figcaption>${esc(quote.context)}</figcaption>` : ""}
-      </figure>` : ""}
-
-      ${important.length ? `<section class="character-section">
-        <h2>Conexiones principales</h2>
-        ${renderCharacterRelationCards(important)}
-      </section>` : ""}
-    </div>`;
+    const p=c.profile || e.profile || {};
+    const blocks=[
+      ["Personalidad", p.personality || p.personalityCore || e.personality],
+      ["Psicología", p.psychology || p.innerWorld || p.conflicts || e.conflicts],
+      ["Habilidades y conocimientos", p.capabilities || p.skills || e.capabilities],
+      ["Debilidades y limitaciones", p.weaknesses || p.limitations || e.limitations],
+      ["Motivaciones", p.motivations || e.motivations],
+      ["Costumbres y hábitos", p.customs || p.habits || e.habits],
+      ["Gustos e intereses", p.tastes || p.interests || e.interests]
+    ];
+    return blocks.filter(([,value])=>{
+      if(!value) return false;
+      if(typeof value==="object" && !Array.isArray(value)) return Object.keys(value).length>0;
+      if(Array.isArray(value)) return value.length>0;
+      return String(value).trim().length>0;
+    });
   }
 
   function renderCharacterProfile(e){
+    const c=characterData(e);
+    const intro = c.introduction || c.summary || e.summary || "";
+    const quote = c.featuredQuote || e.featuredQuote || null;
     const blocks=characterProfileBlocks(e);
-    if(!blocks.length){
-      return `<section class="character-section"><h2>Perfil</h2><div class="empty">Sin información de perfil todavía.</div></section>`;
+
+    return `<div class="character-content-stack">
+      <section class="character-intro-card">
+        <div class="intro-kicker">Perfil</div>
+        <div class="character-prose">${intro ? linkifyText(intro,e.id) : "Sin introducción todavía."}</div>
+      </section>
+
+      ${quote ? `<figure class="featured-quote">
+        <blockquote>${esc(typeof quote==="string" ? quote : (quote.text||""))}</blockquote>
+        ${typeof quote==="object" && quote.context ? `<figcaption>${esc(quote.context)}</figcaption>` : ""}
+      </figure>` : ""}
+
+      ${blocks.map(([title,value])=>`
+        <section class="character-section profile-block">
+          <h2>${esc(title)}</h2>
+          ${renderTextValue(value,e)}
+        </section>
+      `).join("")}
+
+      ${!blocks.length ? `<section class="character-section"><div class="empty">Sin información de perfil todavía.</div></section>` : ""}
+    </div>`;
+  }
+
+  function appearanceData(e){
+    const c=characterData(e);
+    const a=c.appearanceTab || c.appearanceSection || c.appearancePage || {};
+    const rows = [
+      ["Aspecto general", a.general || c.appearanceLong || e.appearance],
+      ["Ropa", a.clothing || a.clothes],
+      ["Equipo", a.equipment || a.gear],
+      ["Armas", a.weapons],
+      ["Rasgos distintivos", a.distinctive || a.features]
+    ].filter(([,value])=>{
+      if(!value) return false;
+      if(typeof value==="object" && !Array.isArray(value)) return Object.keys(value).length>0;
+      if(Array.isArray(value)) return value.length>0;
+      return String(value).trim().length>0;
+    });
+
+    const media = toArray(a.media || a.images || a.gallery).map(item=>{
+      if(typeof item==="string") return {url:item,title:"",caption:""};
+      return {
+        url:item.url || item.src || "",
+        title:item.title || "",
+        caption:item.caption || item.note || ""
+      };
+    }).filter(x=>x.url || x.title || x.caption);
+
+    return {rows,media};
+  }
+
+  function renderAppearanceMedia(media){
+    if(!media.length) return "";
+    return `<div class="appearance-media-grid">
+      ${media.map(item=>`
+        <figure class="appearance-media-card">
+          ${item.url
+            ? `<img src="${esc(item.url)}" alt="">`
+            : `<div class="gallery-placeholder">${icon("personajes")}</div>`}
+          ${(item.title || item.caption) ? `<figcaption>
+            ${item.title ? `<strong>${esc(item.title)}</strong>` : ""}
+            ${item.caption ? `<small>${esc(item.caption)}</small>` : ""}
+          </figcaption>` : ""}
+        </figure>
+      `).join("")}
+    </div>`;
+  }
+
+  function renderCharacterAppearance(e){
+    const {rows,media} = appearanceData(e);
+    if(!rows.length && !media.length){
+      return `<section class="character-section"><h2>Apariencia</h2><div class="empty">Sin información de apariencia todavía.</div></section>`;
     }
 
     return `<div class="character-content-stack">
-      ${blocks.map((block,index)=>`
-        <section class="character-section profile-block">
-          <h2>${esc(block.title)}</h2>
-          ${renderTextValue(block.value,e)}
+      ${rows.map(([title,value])=>`
+        <section class="character-section">
+          <h2>${esc(title)}</h2>
+          ${renderTextValue(value,e)}
         </section>
       `).join("")}
+      ${media.length ? `<section class="character-section">
+        <h2>Apoyo visual</h2>
+        ${renderAppearanceMedia(media)}
+      </section>` : ""}
     </div>`;
   }
 
   function characterHistorySections(e){
     const c=characterData(e);
     const raw=c.history || c.historySections || e.historySections || e.biography || [];
-    if(typeof raw==="string") return [{title:"Historia",body:raw}];
+    if(typeof raw==="string") return [{title:"Historia",body:raw,note:""}];
     if(Array.isArray(raw)){
       return raw.map((s,i)=>{
-        if(typeof s==="string") return {title:`Etapa ${i+1}`,body:s};
+        if(typeof s==="string") return {title:`Etapa ${i+1}`,body:s,note:""};
         return {
           title:s.title || s.label || `Etapa ${i+1}`,
           body:s.body || s.text || s.content || "",
@@ -956,7 +1065,7 @@
       }).filter(s=>s.body);
     }
     if(raw && typeof raw==="object"){
-      return Object.entries(raw).map(([title,body])=>({title,body})).filter(s=>s.body);
+      return Object.entries(raw).map(([title,body])=>({title,body,note:""})).filter(s=>s.body);
     }
     return [];
   }
@@ -983,10 +1092,10 @@
     const rel=c.relationships || c.relations || {};
     const groups=[];
 
-    const normalize=(items,defaultType="Relación")=>toArray(items).map(item=>{
+    const normalize=(items,defaultType="Vínculo",groupTitle="Lazo")=>toArray(items).map((item,idx)=>{
       if(typeof item==="string"){
         const target=entities.find(x=>x.id===item || x.masterTag===item || x.title===item);
-        return target ? {target,type:defaultType,note:"",symbol:""} : null;
+        return target ? {target,type:defaultType,note:"",symbol:"",groupTitle,anchor:`${groupTitle}-${target.id}-${idx}`} : null;
       }
       const id=item.targetId || item.id || item.entityId || item.target;
       const target=entities.find(x=>x.id===id || x.masterTag===id || x.title===id);
@@ -994,59 +1103,131 @@
         target,
         type:item.type || item.role || item.label || defaultType,
         note:item.note || item.description || item.text || "",
-        symbol:item.symbol || ""
+        symbol:item.symbol || "",
+        groupTitle,
+        anchor:`${groupTitle}-${target.id}-${idx}`.replace(/[^a-zA-Z0-9_-]+/g,"-")
       } : null;
     }).filter(Boolean);
 
     if(Array.isArray(rel)){
-      groups.push({title:"Relaciones",items:normalize(rel)});
+      groups.push({title:"Lazos",items:normalize(rel,"Lazo","Lazos")});
     }else if(rel && typeof rel==="object"){
       const map=[
-        ["Familia",rel.family],
-        ["Relaciones personales",rel.personal || rel.important],
-        ["Otras relaciones",rel.other]
+        ["Familia", rel.family],
+        ["Alianzas y afinidades", rel.personal || rel.important || rel.alliances || rel.friends],
+        ["Parejas", rel.romance || rel.partners],
+        ["Enemistades y rivalidades", rel.enemies || rel.rivals],
+        ["Otros lazos", rel.other]
       ];
       for(const [title,items] of map){
-        const normalized=normalize(items);
+        const normalized=normalize(items,"Lazo",title);
         if(normalized.length) groups.push({title,items:normalized});
       }
     }
 
     if(!groups.length){
-      const generic=relationCandidates(e);
-      if(generic.length) groups.push({title:"Relaciones",items:generic});
+      const generic = relationCandidates(e).map((r,idx)=>({
+        ...r,
+        symbol:r.symbol || "",
+        groupTitle:"Lazos",
+        anchor:`Lazos-${r.target.id}-${idx}`
+      }));
+      if(generic.length) groups.push({title:"Lazos",items:generic});
     }
     return groups;
   }
 
-  function renderCharacterRelationCards(items){
-    if(!items.length) return `<div class="empty">Sin relaciones registradas todavía.</div>`;
-    return `<div class="character-relation-grid">${items.map(r=>`
-      <button class="character-relation-card" data-open-related="${r.target.id}">
-        <span class="character-relation-icon ${r.symbol ? "has-manual-symbol" : ""}">${r.symbol ? esc(r.symbol) : icon(r.target.category)}</span>
-        <span class="character-relation-body">
-          <strong>${esc(r.target.title)}</strong>
-          <small>${esc(r.type || "Relación")}</small>
-          ${r.note ? `<span>${linkifyText(r.note,r.target.id)}</span>` : ""}
-        </span>
-        <span class="relation-arrow">›</span>
-      </button>
-    `).join("")}</div>`;
+  function renderLazoOverview(groups){
+    const flat = groups.flatMap(g=>g.items);
+    if(!flat.length) return "";
+    return `<section class="character-section">
+      <h2>Mapa rápido de lazos</h2>
+      <div class="bond-jump-grid">
+        ${flat.map(r=>`
+          <a class="bond-jump-card" href="#${esc(r.anchor)}" data-bond-jump="${esc(r.anchor)}">
+            <span class="bond-jump-symbol ${r.symbol ? "has-manual-symbol" : ""}">${r.symbol ? esc(r.symbol) : icon(r.target.category)}</span>
+            <span class="bond-jump-copy">
+              <strong>${esc(r.target.title)}</strong>
+              <small>${esc(r.type || r.groupTitle || "Lazo")}</small>
+            </span>
+            <span class="relation-arrow">↘</span>
+          </a>
+        `).join("")}
+      </div>
+    </section>`;
   }
 
-  function renderCharacterRelations(e){
+  function renderCharacterBonds(e){
     const groups=normalizeCharacterRelations(e);
     if(!groups.length){
-      return `<section class="character-section"><h2>Relaciones</h2><div class="empty">Sin relaciones registradas todavía.</div></section>`;
+      return `<section class="character-section"><h2>Lazos</h2><div class="empty">Sin lazos registrados todavía.</div></section>`;
     }
+
     return `<div class="character-content-stack">
+      ${renderLazoOverview(groups)}
       ${groups.map(group=>`
         <section class="character-section">
           <h2>${esc(group.title)}</h2>
-          ${renderCharacterRelationCards(group.items)}
+          <div class="bond-detail-stack">
+            ${group.items.map(r=>`
+              <article class="bond-detail-card" id="${esc(r.anchor)}">
+                <div class="bond-detail-head">
+                  <span class="bond-detail-symbol ${r.symbol ? "has-manual-symbol" : ""}">${r.symbol ? esc(r.symbol) : icon(r.target.category)}</span>
+                  <div class="bond-detail-title">
+                    <button class="text-button bond-name-link" data-open-related="${r.target.id}">${esc(r.target.title)}</button>
+                    <small>${esc(r.type || "Lazo")}</small>
+                  </div>
+                </div>
+                <div class="character-prose">${r.note ? linkifyText(r.note,e.id) : "Sin desarrollo todavía."}</div>
+              </article>
+            `).join("")}
+          </div>
         </section>
       `).join("")}
     </div>`;
+  }
+
+  function characterGallery(e){
+    const c=characterData(e);
+    const raw=[...toArray(c.gallery),...toArray(e.gallery),...toArray(e.media)];
+    const seen=new Set(), items=[];
+
+    for(const item of raw){
+      const normalized=typeof item==="string"
+        ? {url:item,title:"",caption:""}
+        : {
+            url:item.url||item.src||item.href||"",
+            title:item.title||item.name||"",
+            caption:item.caption||item.note||item.description||""
+          };
+      const key=`${normalized.url}|${normalized.title}|${normalized.caption}`;
+      if(!seen.has(key)){seen.add(key);items.push(normalized)}
+    }
+    return items;
+  }
+
+  function renderCharacterGallery(e){
+    const items=characterGallery(e);
+    if(!items.length){
+      return `<section class="character-section"><h2>Galería</h2><div class="empty">Sin imágenes complementarias todavía.</div></section>`;
+    }
+
+    return `<section class="character-section gallery-section">
+      <h2>Galería</h2>
+      <div class="character-gallery-grid">
+        ${items.map(item=>`
+          <article class="character-gallery-card">
+            ${item.url
+              ? `<img src="${esc(item.url)}" alt="">`
+              : `<div class="gallery-placeholder">${icon("personajes")}</div>`}
+            ${(item.title||item.caption) ? `<div class="gallery-caption">
+              ${item.title ? `<strong>${esc(item.title)}</strong>` : ""}
+              ${item.caption ? `<small>${esc(item.caption)}</small>` : ""}
+            </div>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    </section>`;
   }
 
   function participationCategories(){
@@ -1074,9 +1255,9 @@
     if(explicit && typeof explicit==="object" && !Array.isArray(explicit)){
       for(const [cat,items] of Object.entries(explicit)){
         for(const item of toArray(items)){
-          const id=typeof item==="string"?item:(item.targetId||item.id||item.entityId);
+          const id=typeof item==="string" ? item : (item.targetId||item.id||item.entityId);
           const target=entities.find(x=>x.id===id||x.masterTag===id||x.title===id);
-          add(target,typeof item==="object"?(item.note||item.role||""):"");
+          add(target, typeof item==="object" ? (item.note||item.role||"") : "");
         }
       }
     }
@@ -1127,140 +1308,88 @@
     </div>`;
   }
 
-  function characterGallery(e){
-    const c=characterData(e);
-    const raw=[...toArray(c.gallery),...toArray(e.gallery),...toArray(e.media)];
-    const seen=new Set();
-    const items=[];
-
-    for(const item of raw){
-      const normalized=typeof item==="string"
-        ? {url:item,title:"",category:"Otros",caption:""}
-        : {
-            url:item.url||item.src||item.href||"",
-            title:item.title||item.name||"",
-            category:item.category||item.group||item.kind||"Otros",
-            caption:item.caption||item.note||item.description||""
-          };
-      const key=`${normalized.url}|${normalized.title}|${normalized.category}`;
-      if(!seen.has(key)){seen.add(key);items.push(normalized)}
-    }
-
-    const main=getImage(e);
-    if(main && !items.some(x=>x.url===main)){
-      items.unshift({url:main,title:"Imagen principal",category:"Retratos",caption:""});
-    }
-    return items;
-  }
-
-  function renderCharacterGallery(e,filter="Todo"){
-    const items=characterGallery(e);
-    if(!items.length){
-      return `<section class="character-section"><h2>Galería</h2><div class="empty">Sin imágenes todavía.</div></section>`;
-    }
-    const categories=["Todo",...new Set(items.map(x=>x.category))];
-    const shown=filter==="Todo" ? items : items.filter(x=>x.category===filter);
-
-    return `<div class="character-content-stack">
-      <section class="character-section gallery-section">
-        <div class="gallery-toolbar">
-          ${categories.map(cat=>`<button class="gallery-filter ${cat===filter?"active":""}" data-gallery-filter="${esc(cat)}">${esc(cat)}</button>`).join("")}
-        </div>
-        <div class="character-gallery-grid">
-          ${shown.map(item=>`
-            <article class="character-gallery-card">
-              ${item.url
-                ? `<img src="${esc(item.url)}" alt="">`
-                : `<div class="gallery-placeholder">${icon("personajes")}</div>`}
-              ${(item.title||item.caption) ? `<div class="gallery-caption">
-                ${item.title ? `<strong>${esc(item.title)}</strong>` : ""}
-                ${item.caption ? `<small>${esc(item.caption)}</small>` : ""}
-              </div>` : ""}
-            </article>
-          `).join("")}
-        </div>
-      </section>
-    </div>`;
-  }
-
   function researchData(e){
     const c=characterData(e);
     return c.research || e.research || {};
   }
 
   function renderCharacterResearch(e){
-    const research=researchData(e);
-    const sources=sourcesFor(e);
-    const pending=toArray(research.pending || research.todo || e.pending);
-    const notes=toArray(research.notes || e.notes);
-    const inspirations=toArray(research.inspirations || e.inspirations);
-    const canon=research.canon || research.status || e.canonStatus || "";
+    const r=researchData(e);
+    const kind = r.kind || r.characterType || "—";
+    const workStatus = r.workStatus || r.progress || "—";
+    const sources = toArray(r.sources).filter(s=>s && (s.url || s.title));
+    const pending = toArray(r.pending || r.todo);
+    const notes = toArray(r.notes);
 
     return `<div class="character-content-stack">
-      ${canon ? `<section class="character-section">
-        <h2>Estado</h2>
-        <div class="canon-status"><span></span>${esc(canon)}</div>
-      </section>` : ""}
+      <section class="character-section research-meta-grid">
+        <div class="research-meta-card">
+          <h2>Personaje</h2>
+          <div class="research-pill">${esc(kind)}</div>
+        </div>
+        <div class="research-meta-card">
+          <h2>Estado de trabajo</h2>
+          <div class="research-pill">${esc(workStatus)}</div>
+        </div>
+      </section>
 
-      ${sources.length ? `<section class="character-section">
+      <section class="character-section">
         <h2>Fuentes</h2>
-        <div class="source-list">${sources.map(s=>`
-          <div class="source-item">
-            <strong>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>` : esc(s.title)}</strong>
-            ${s.note ? `<p>${esc(s.note)}</p>` : ""}
-          </div>
-        `).join("")}</div>
-      </section>` : ""}
+        ${sources.length
+          ? `<div class="source-list">${sources.map(s=>`
+              <div class="source-item">
+                <strong>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>` : esc(s.title || "Fuente")}</strong>
+                ${s.note ? `<p>${esc(s.note)}</p>` : ""}
+              </div>
+            `).join("")}</div>`
+          : `<div class="empty">Sin fuentes externas registradas todavía.</div>`}
+      </section>
 
-      ${pending.length ? `<section class="character-section">
+      <section class="character-section">
         <h2>Pendientes</h2>
-        <ul class="research-list">${pending.map(x=>`<li>${esc(typeof x==="string"?x:(x.text||x.label||""))}</li>`).join("")}</ul>
-      </section>` : ""}
+        ${pending.length
+          ? `<ul class="research-list">${pending.map(x=>`<li>${esc(typeof x==="string" ? x : (x.text||x.label||""))}</li>`).join("")}</ul>`
+          : `<div class="empty">Sin pendientes registrados.</div>`}
+      </section>
 
-      ${inspirations.length ? `<section class="character-section">
-        <h2>Inspiraciones</h2>
-        <ul class="research-list">${inspirations.map(x=>`<li>${esc(typeof x==="string"?x:(x.text||x.label||""))}</li>`).join("")}</ul>
-      </section>` : ""}
-
-      ${notes.length ? `<section class="character-section">
-        <h2>Notas de autor</h2>
-        <div class="character-prose">${notes.map(n=>`<p>${linkifyText(typeof n==="string"?n:(n.text||n.note||""),e.id)}</p>`).join("")}</div>
-      </section>` : ""}
-
-      ${!canon && !sources.length && !pending.length && !inspirations.length && !notes.length
-        ? `<section class="character-section"><h2>Investigación</h2><div class="empty">Sin material de investigación todavía.</div></section>`
-        : ""}
+      <section class="character-section">
+        <h2>Notas</h2>
+        ${notes.length
+          ? `<div class="character-prose">${notes.map(n=>`<p>${linkifyText(typeof n==="string" ? n : (n.text||n.note||""),e.id)}</p>`).join("")}</div>`
+          : `<div class="empty">Sin notas de trabajo.</div>`}
+      </section>
     </div>`;
   }
 
   function renderCharacterTab(e,tab){
-    if(tab==="summary") return renderCharacterSummary(e);
     if(tab==="profile") return renderCharacterProfile(e);
+    if(tab==="appearance") return renderCharacterAppearance(e);
     if(tab==="history") return renderCharacterHistory(e);
-    if(tab==="character-relations") return renderCharacterRelations(e);
+    if(tab==="bonds") return renderCharacterBonds(e);
+    if(tab==="gallery") return renderCharacterGallery(e);
     if(tab==="participation") return renderCharacterParticipation(e);
-    if(tab==="gallery") return renderCharacterGallery(e,"Todo");
     if(tab==="research") return renderCharacterResearch(e);
-    return renderCharacterSummary(e);
+    return renderCharacterProfile(e);
   }
 
   function wireCharacterTab(e){
     wireEntityLinks();
-
-    $$("[data-gallery-filter]").forEach(btn=>{
-      btn.onclick=()=>{
-        $("#characterTabPanel").innerHTML=renderCharacterGallery(e,btn.dataset.galleryFilter);
-        wireCharacterTab(e);
+    $$('[data-bond-jump]').forEach(link=>{
+      link.onclick=(ev)=>{
+        ev.preventDefault();
+        const anchor = link.dataset.bondJump;
+        const node = document.getElementById(anchor);
+        if(node) node.scrollIntoView({behavior:'smooth',block:'start'});
       };
     });
   }
 
-  function showCharacterEntity(e,tab="summary"){
+  function showCharacterEntity(e,tab="profile"){
     currentView={type:"entity",id:e.id};
     setActive("");
 
     const validTabs=CHARACTER_TABS.map(x=>x[0]);
-    let active=validTabs.includes(tab) ? tab : "summary";
+    let active=validTabs.includes(tab) ? tab : "profile";
 
     $("#view").innerHTML=`
       <div class="character-page">
@@ -1301,7 +1430,7 @@
 
     $("#pageBack").onclick=()=>showCategory("personajes");
 
-    $$("[data-character-tab]").forEach(btn=>{
+    $$('[data-character-tab]').forEach(btn=>{
       btn.onclick=()=>{
         active=btn.dataset.characterTab;
         $$(".character-tab").forEach(b=>b.classList.toggle("active",b===btn));
@@ -1317,13 +1446,12 @@
     history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
   }
 
-
   function showEntity(id,tab="overview"){
     const e=entities.find(x=>x.id===id);
     if(!e) return;
 
     if(e.category==="personajes"){
-      showCharacterEntity(e,tab==="overview" ? "summary" : tab);
+      showCharacterEntity(e,tab==="overview" ? "profile" : tab);
       return;
     }
 
