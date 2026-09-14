@@ -105,3 +105,7 @@ Consulta `PERSONAJES_TANDA0.md`.
 - Rutas: origen/destino, waypoints, nodos y niveles, sentido/circularidad, tramos, transportes, velocidades, pausas, condiciones, factores, duración y distancia manuales, fechas e incertidumbre.
 - Generación de rutas como propuesta editable: waypoints, zonas a evitar, líneas/capas preferidas, suavizado, densidad y obstáculos; luego puede aceptarse o corregirse moviendo nodos.
 - Cálculos derivados: longitudes, áreas, perímetros, volumen aproximado, distancia entre puntos, distancia/duración/velocidad media de rutas, zonas atravesadas, porcentaje aproximado dentro de zonas, niveles y desnivel cuando hay datos.
+
+
+## A6.6.1 — revisión QA de Lugares/Mapas
+Correcciones funcionales: regex de rutas internas y extensiones; cancelación de herramientas; bloqueo de dibujo sin imagen base; validación mínima de geometrías; huecos reales en zonas; intersecciones robustas; limpieza de referencias al borrar elementos/capas/niveles; aplicación del nivel predeterminado; orden visual de capas; transporte predeterminado en rutas; cálculo por tramos con intervalos de velocidad; límites de zoom normalizados.

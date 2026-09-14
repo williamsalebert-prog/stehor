@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.6-lugares-mapas";
+  const APP_BUILD = "A6.6.1-lugares-mapas-qa";
   const STORE = "entities";
 
   let db;
@@ -800,17 +800,17 @@
   }
 
   function getPath(obj,path){
-    return String(path||"").split(".").filter(Boolean).reduce((cur,key)=>cur?.[/^\\d+$/.test(key)?Number(key):key],obj);
+    return String(path||"").split(".").filter(Boolean).reduce((cur,key)=>cur?.[/^\d+$/.test(key)?Number(key):key],obj);
   }
 
   function setPath(obj,path,value){
     const parts=String(path||"").split(".").filter(Boolean);
     let cur=obj;
     parts.forEach((part,i)=>{
-      const key=/^\\d+$/.test(part)?Number(part):part;
+      const key=/^\d+$/.test(part)?Number(part):part;
       if(i===parts.length-1){cur[key]=value;return}
       const next=parts[i+1];
-      if(cur[key]==null || typeof cur[key]!=="object") cur[key]=/^\\d+$/.test(next)?[]:{};
+      if(cur[key]==null || typeof cur[key]!=="object") cur[key]=/^\d+$/.test(next)?[]:{};
       cur=cur[key];
     });
   }
@@ -927,8 +927,8 @@
   function mediaKind(file){
     const name=(file?.name||"").toLowerCase();
     const type=(file?.type||"").toLowerCase();
-    if(type.startsWith("image/") || /\\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(name)) return "image";
-    if(type.startsWith("video/") || /\\.(mp4|webm|ogv|ogg|mov|m4v)$/i.test(name)) return "video";
+    if(type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(name)) return "image";
+    if(type.startsWith("video/") || /\.(mp4|webm|ogv|ogg|mov|m4v)$/i.test(name)) return "video";
     return "";
   }
 
@@ -1500,7 +1500,7 @@
     if(kind==="point") return {...common,x:nodes[0]?.x??50,y:nodes[0]?.y??50,lat:"",lon:"",altitude:"",symbol:"",size:"",rotation:0,label:true,labelPosition:"top",labelOffsetX:0,labelOffsetY:0,radius:"",direction:""};
     if(kind==="line") return {...common,nodes,closed:false,strokeType:"solid",direction:"none",arrows:false,realWidth:"",smoothing:0,nodeElevations:[]};
     if(kind==="zone") return {...common,nodes,holes:[],parts:[],fillOpacity:"",borderWidth:"",labelPoint:null,elevation:"",height:"",containerId:""};
-    return {...common,nodes,nodeLevels:nodes.map(()=>""),originPointId:"",destinationPointId:"",waypointPointIds:[],circular:false,direction:"forward",segments:[],speedMode:"fixed",fixedSpeed:"",speedMin:"",speedMax:"",speedApprox:false,durationManual:"",departure:"",arrival:"",uncertainty:"",manualDistance:"",proposal:false,generation:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}};
+    return {...common,nodes,nodeLevels:nodes.map(()=>""),originPointId:"",destinationPointId:"",waypointPointIds:[],circular:false,direction:"forward",transport:"",segments:[],speedMode:"fixed",fixedSpeed:"",speedMin:"",speedMax:"",speedApprox:false,durationManual:"",departure:"",arrival:"",uncertainty:"",manualDistance:"",proposal:false,generation:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}};
   }
 
   const DIST_TO_M={mm:.001,cm:.01,m:1,km:1000,mi:1609.344,ft:.3048,nmi:1852};
@@ -1605,9 +1605,16 @@
   }
 
   function segmentsIntersect(a,b,c,d){
-    const orient=(p,q,r)=>Math.sign((q.y-p.y)*(r.x-q.x)-(q.x-p.x)*(r.y-q.y));
-    const o1=orient(a,b,c),o2=orient(a,b,d),o3=orient(c,d,a),o4=orient(c,d,b);
-    return o1!==o2&&o3!==o4;
+    const cross=(p,q,r)=>(Number(q.x)-Number(p.x))*(Number(r.y)-Number(p.y))-(Number(q.y)-Number(p.y))*(Number(r.x)-Number(p.x));
+    const eps=1e-9;
+    const onSegment=(p,q,r)=>Math.min(Number(p.x),Number(r.x))-eps<=Number(q.x)&&Number(q.x)<=Math.max(Number(p.x),Number(r.x))+eps&&Math.min(Number(p.y),Number(r.y))-eps<=Number(q.y)&&Number(q.y)<=Math.max(Number(p.y),Number(r.y))+eps;
+    const v1=cross(a,b,c),v2=cross(a,b,d),v3=cross(c,d,a),v4=cross(c,d,b);
+    if(((v1>eps&&v2<-eps)||(v1<-eps&&v2>eps))&&((v3>eps&&v4<-eps)||(v3<-eps&&v4>eps)))return true;
+    if(Math.abs(v1)<=eps&&onSegment(a,c,b))return true;
+    if(Math.abs(v2)<=eps&&onSegment(a,d,b))return true;
+    if(Math.abs(v3)<=eps&&onSegment(c,a,d))return true;
+    if(Math.abs(v4)<=eps&&onSegment(c,b,d))return true;
+    return false;
   }
 
   function polylineCrossesZone(nodes,z){
@@ -1665,7 +1672,9 @@
         const from=Math.max(0,Math.min(nodes.length-2,Number(seg.fromIndex)||0));
         const to=Math.max(from+1,Math.min(nodes.length-1,Number(seg.toIndex)||nodes.length-1));
         const dist=polylineMeters(m,nodes.slice(from,to+1));
-        const speed=Number(seg.speed)||Number(r.fixedSpeed)||Number(m.settings.routeDefaults.defaultSpeed)||0;
+        let speed=Number(seg.speed)||0;
+        if(!speed&&Number(seg.speedMin)>0&&Number(seg.speedMax)>0) speed=(Number(seg.speedMin)+Number(seg.speedMax))/2;
+        if(!speed) speed=Number(r.fixedSpeed)||Number(m.settings.routeDefaults.defaultSpeed)||0;
         const factor=Number(seg.factor)||1;
         const ms=speedToMs(speed*factor,speedUnit);
         if(ms>0) total+=dist/ms;
@@ -1792,8 +1801,9 @@
       let markers="";if(arrows){if(el.direction==="backward"||el.direction==="both")markers+=' marker-start="url(#mapArrow)"';if(el.direction==="forward"||el.direction==="both")markers+=' marker-end="url(#mapArrow)"'}
       if(nodes.length>1)shape=`<polyline ${common} class="map-shape ${selected?"selected":""}" points="${svgPoints(nodes)}" fill="${el.closed?`${esc(s.color)}22`:"none"}" stroke="${esc(s.color)}" stroke-width="${Math.max(.18,s.width*.18)}" ${dashAttr}${markers}/>`;
     }else if(el.kind==="zone"){
-      const renderRing=(nodes)=>toArray(nodes).length>2?`<polygon ${common} class="map-shape zone-shape ${selected?"selected":""}" points="${svgPoints(nodes)}" fill="${esc(s.color)}" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):Number(m.settings.visual.zoneOpacity)||.22}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`:"";
-      shape=renderRing(el.nodes)+toArray(el.parts).map(renderRing).join("")+toArray(el.holes).map(h=>`<polygon class="map-zone-hole" points="${svgPoints(h)}" fill="rgba(10,10,14,.72)" stroke="${esc(s.color)}" stroke-width=".12"/>`).join("");
+      const rings=[toArray(el.nodes),...toArray(el.parts),...toArray(el.holes)].filter(r=>r.length>2);
+      const pathD=rings.map(r=>`M ${r.map(p=>`${Number(p.x)||0} ${Number(p.y)||0}`).join(" L ")} Z`).join(" ");
+      if(pathD)shape=`<path ${common} class="map-shape zone-shape ${selected?"selected":""}" d="${pathD}" fill="${esc(s.color)}" fill-rule="evenodd" clip-rule="evenodd" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):Number(m.settings.visual.zoneOpacity)||.22}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`;
     }else if(el.kind==="route"){
       let nodes=routeNodesForCalc(el);if(nodes.length>1){const markers=el.direction==="backward"?' marker-start="url(#mapArrow)"':el.direction==="both"?' marker-start="url(#mapArrow)" marker-end="url(#mapArrow)"':' marker-end="url(#mapArrow)"';shape=`<polyline ${common} class="map-shape route-shape ${selected?"selected":""} ${el.proposal?"proposal":""}" points="${svgPoints(nodes)}" fill="none" stroke="${esc(s.color)}" stroke-width="${Math.max(.22,s.width*.2)}" ${el.proposal?'stroke-dasharray="1.2 1"':dashAttr}${markers}/>`}
     }
@@ -1814,7 +1824,11 @@
   }
 
   function renderMapElementsSvg(m){
-    const ordered=m.elements.slice().sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0));
+    const layerOrder=el=>{
+      const vals=toArray(el.layerIds).map(id=>m.layers.find(l=>l.id===id)).filter(Boolean).map(l=>Number(l.order)||0);
+      return vals.length?Math.max(...vals):0;
+    };
+    const ordered=m.elements.slice().sort((a,b)=>layerOrder(a)-layerOrder(b)||(Number(a.order)||0)-(Number(b.order)||0));
     const view=currentMapView(m);
     if(!m.settings.visual.cluster||view.zoom>=1)return ordered.map(el=>renderMapElementSvg(m,el)).join("");
     const points=ordered.filter(el=>el.kind==="point"&&mapElementVisible(m,el)&&el.id!==selectedPlaceMapElementId);
@@ -2224,6 +2238,7 @@
         ${settingRow("Destino",mapSelect(`elements.${i}.destinationPointId`,r.destinationPointId||"",[["","—"],...m.elements.filter(x=>x.kind==="point").map(p=>[p.id,p.name||"Punto"]) ]))}
         ${settingRow("Circular",mapCheckbox(`elements.${i}.circular`,r.circular,"Sí"))}
         ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,r.direction,[["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
+        ${settingRow("Transporte",mapInput(`elements.${i}.transport`,r.transport||m.settings.routeDefaults.defaultTransport||""))}
         ${settingRow("Modo de velocidad",mapSelect(`elements.${i}.speedMode`,r.speedMode,[["fixed","Fija"],["interval","Intervalo"],["segments","Por tramo"],["knownTime","Tiempo conocido"]]))}
         ${settingRow(`Velocidad fija (${speedUnit})`,mapInput(`elements.${i}.fixedSpeed`,r.fixedSpeed,{type:"number",step:"any"}))}
         ${settingRow("Velocidad mínima",mapInput(`elements.${i}.speedMin`,r.speedMin,{type:"number",step:"any"}))}
@@ -2273,13 +2288,14 @@
   }
 
   function renderMapToolbar(m){
-    const drawing=placeMapTool?.mapId===m.id&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
+    const activeTool=placeMapTool?.mapId===m.id;
+    const drawing=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
     return `<div class="map-toolbar">
-      <button class="map-tool" data-draw-tool="point">＋ Punto</button>
-      <button class="map-tool" data-draw-tool="line">＋ Línea</button>
-      <button class="map-tool" data-draw-tool="zone">＋ Zona</button>
-      <button class="map-tool" data-draw-tool="route">＋ Ruta manual</button>
-      ${drawing?`<button class="map-tool finish" data-finish-map-tool>Terminar</button><button class="map-tool cancel" data-cancel-map-tool>Cancelar</button>`:""}
+      <button class="map-tool" data-draw-tool="point" ${!m.image?.src?"disabled":""}>＋ Punto</button>
+      <button class="map-tool" data-draw-tool="line" ${!m.image?.src?"disabled":""}>＋ Línea</button>
+      <button class="map-tool" data-draw-tool="zone" ${!m.image?.src?"disabled":""}>＋ Zona</button>
+      <button class="map-tool" data-draw-tool="route" ${!m.image?.src?"disabled":""}>＋ Ruta manual</button>
+      ${drawing?`<button class="map-tool finish" data-finish-map-tool>Terminar</button>`:""}${activeTool?`<button class="map-tool cancel" data-cancel-map-tool>Cancelar</button>`:""}
       <span class="map-toolbar-spacer"></span>
       <button class="map-tool" data-map-zoom="out">−</button>
       <button class="map-tool" data-map-zoom="reset">100%</button>
@@ -2344,11 +2360,42 @@
     const arr=selector;if(checked){if(!arr.includes(value))arr.push(value)}else{const i=arr.indexOf(value);if(i>=0)arr.splice(i,1)}
   }
 
+  function applyDefaultLevel(m,el){
+    const level=m.levels.find(l=>l.default)||null;
+    if(level&&!el.levelIds?.length)el.levelIds=[level.id];
+    if(level&&el.kind==="route"&&Array.isArray(el.nodeLevels))el.nodeLevels=el.nodeLevels.map(x=>x||level.id);
+    return el;
+  }
+
+  function cleanupMapReferences(m,removed){
+    const id=removed?.id;if(!id)return;
+    m.settings.routeDefaults.restrictedLayerIds=(m.settings.routeDefaults.restrictedLayerIds||[]).filter(x=>x!==id);
+    m.settings.routeDefaults.preferredLayerIds=(m.settings.routeDefaults.preferredLayerIds||[]).filter(x=>x!==id);
+    m.generator.waypointIds=(m.generator.waypointIds||[]).filter(x=>x!==id);
+    m.generator.avoidZoneIds=(m.generator.avoidZoneIds||[]).filter(x=>x!==id);
+    m.generator.preferredLineIds=(m.generator.preferredLineIds||[]).filter(x=>x!==id);
+    if(m.generator.originPointId===id)m.generator.originPointId="";
+    if(m.generator.destinationPointId===id)m.generator.destinationPointId="";
+    for(const el of m.elements){
+      el.layerIds=(el.layerIds||[]).filter(x=>x!==id);
+      el.levelIds=(el.levelIds||[]).filter(x=>x!==id);
+      if(el.targetId===id)el.targetId="";
+      if(el.containerId===id)el.containerId="";
+      if(el.originPointId===id)el.originPointId="";
+      if(el.destinationPointId===id)el.destinationPointId="";
+      if(el.waypointPointIds)el.waypointPointIds=el.waypointPointIds.filter(x=>x!==id);
+      if(el.nodeLevels)el.nodeLevels=el.nodeLevels.map(x=>x===id?"":x);
+    }
+  }
+
   function finishMapTool(e,m){
     const t=placeMapTool;if(!t||t.mapId!==m.id)return;
-    if(t.mode==="draw-line"&&t.nodes.length>=2){const el=newMapElement("line",t.nodes);m.elements.push(el);selectedPlaceMapElementId=el.id}
-    else if(t.mode==="draw-zone"&&t.nodes.length>=3){const el=newMapElement("zone",t.nodes);m.elements.push(el);selectedPlaceMapElementId=el.id}
-    else if(t.mode==="draw-route"&&t.nodes.length>=2){const el=newMapElement("route",t.nodes);m.elements.push(el);selectedPlaceMapElementId=el.id}
+    const minNodes=t.mode==="draw-zone"||t.mode==="zone-part"||t.mode==="zone-hole"?3:2;
+    if(["draw-line","draw-zone","draw-route","zone-part","zone-hole"].includes(t.mode)&&t.nodes.length<minNodes){alert(`Faltan puntos: se necesitan al menos ${minNodes}.`);return}
+    if(t.mode==="append-nodes"&&!t.nodes.length){placeMapTool=null;refreshPlaceTab(e);return}
+    if(t.mode==="draw-line"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("line",t.nodes));m.elements.push(el);selectedPlaceMapElementId=el.id}
+    else if(t.mode==="draw-zone"&&t.nodes.length>=3){const el=applyDefaultLevel(m,newMapElement("zone",t.nodes));m.elements.push(el);selectedPlaceMapElementId=el.id}
+    else if(t.mode==="draw-route"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("route",t.nodes));el.transport=m.settings.routeDefaults.defaultTransport||"";el.fixedSpeed=m.settings.routeDefaults.defaultSpeed||"";m.elements.push(el);selectedPlaceMapElementId=el.id}
     else if(t.mode==="append-nodes"&&t.targetId){const el=placeMapElement(m,t.targetId);if(el){el.nodes.push(...t.nodes);if(el.kind==="route")el.nodeLevels.push(...t.nodes.map(()=>""))}}
     else if(t.mode==="zone-part"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.parts.push(t.nodes)}
     else if(t.mode==="zone-hole"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.holes.push(t.nodes)}
@@ -2381,8 +2428,9 @@
   }
 
   function zoneBounds(z){
-    const pts=[...toArray(z.nodes),...toArray(z.parts).flat()];
-    return {minX:Math.min(...pts.map(p=>p.x)),maxX:Math.max(...pts.map(p=>p.x)),minY:Math.min(...pts.map(p=>p.y)),maxY:Math.max(...pts.map(p=>p.y))};
+    const pts=[...toArray(z.nodes),...toArray(z.parts).flat()].filter(p=>Number.isFinite(Number(p?.x))&&Number.isFinite(Number(p?.y)));
+    if(!pts.length)return null;
+    return {minX:Math.min(...pts.map(p=>Number(p.x))),maxX:Math.max(...pts.map(p=>Number(p.x))),minY:Math.min(...pts.map(p=>Number(p.y))),maxY:Math.max(...pts.map(p=>Number(p.y)))};
   }
 
   function detourAroundZones(nodes,zones,pad=2){
@@ -2392,7 +2440,7 @@
       for(let i=1;i<pts.length;i++){
         const a=next[next.length-1],b=pts[i];
         if(polylineCrossesZone([a,b],z)){
-          const box=zoneBounds(z);
+          const box=zoneBounds(z);if(!box){next.push(b);continue}
           const candidates=[{x:box.minX-pad,y:box.minY-pad},{x:box.maxX+pad,y:box.minY-pad},{x:box.maxX+pad,y:box.maxY+pad},{x:box.minX-pad,y:box.maxY+pad}].map(p=>({x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y))}));
           candidates.sort((p,q)=>(Math.hypot(p.x-a.x,p.y-a.y)+Math.hypot(b.x-p.x,b.y-p.y))-(Math.hypot(q.x-a.x,q.y-a.y)+Math.hypot(b.x-q.x,b.y-q.y)));
           next.push(candidates[0]);
@@ -2423,7 +2471,7 @@
     if(avoid.length)nodes=detourAroundZones(nodes,avoid,Math.max(1,Number(d.tolerance)||2));
     nodes=densifyPolyline(nodes,Math.max(nodes.length,Number(d.pointDensity)||nodes.length));
     nodes=smoothPolyline(nodes,Number(d.smoothness)||0);
-    const r=newMapElement("route",nodes);r.name="Ruta propuesta";r.proposal=true;r.originPointId=origin.id;r.destinationPointId=dest.id;r.waypointPointIds=[...g.waypointIds];r.fixedSpeed=d.defaultSpeed;r.generation=JSON.parse(JSON.stringify(g));
+    const r=applyDefaultLevel(m,newMapElement("route",nodes));r.name="Ruta propuesta";r.transport=d.defaultTransport||"";r.proposal=true;r.originPointId=origin.id;r.destinationPointId=dest.id;r.waypointPointIds=[...g.waypointIds];r.fixedSpeed=d.defaultSpeed;r.generation=JSON.parse(JSON.stringify(g));
     m.elements.push(r);selectedPlaceMapElementId=r.id;saveMapAndRefresh(e);
   }
 
@@ -2450,7 +2498,7 @@
           const key=t.mode.endsWith("A")?"pointA":"pointB";m.settings.calibration[key]=p;placeMapTool=null;await saveMapAndRefresh(e);return;
         }
         if(t.mode==="draw-point"){
-          const el=newMapElement("point",[p]);m.elements.push(el);selectedPlaceMapElementId=el.id;placeMapTool=null;await saveMapAndRefresh(e);return;
+          const el=applyDefaultLevel(m,newMapElement("point",[p]));m.elements.push(el);selectedPlaceMapElementId=el.id;placeMapTool=null;await saveMapAndRefresh(e);return;
         }
         t.nodes.push(p);refreshPlaceTab(e);return;
       }
@@ -2490,24 +2538,24 @@
       input.onchange=handler;
     });
 
-    $$('[data-pick-calibration]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:`pick-calibration-${btn.dataset.pickCalibration}`,mapId:m.id,nodes:[]};toast(`Haz clic en el mapa para elegir el punto ${btn.dataset.pickCalibration}.`)});
+    $$('[data-pick-calibration]').forEach(btn=>btn.onclick=()=>{if(!m.image?.src){alert('Carga primero una imagen base.');return}placeMapTool={mode:`pick-calibration-${btn.dataset.pickCalibration}`,mapId:m.id,nodes:[]};toast(`Haz clic en el mapa para elegir el punto ${btn.dataset.pickCalibration}.`);refreshPlaceTab(e)});
     $('[data-add-control-pair]')?.addEventListener('click',async()=>{m.settings.calibration.controlPairs.push({x1:"",y1:"",x2:"",y2:"",distance:""});await saveMapAndRefresh(e)});
     $$('[data-remove-control-pair]').forEach(btn=>btn.onclick=async()=>{m.settings.calibration.controlPairs.splice(Number(btn.dataset.removeControlPair),1);await saveMapAndRefresh(e)});
 
     $('[data-add-layer]')?.addEventListener('click',async()=>{m.layers.push({id:mapUid('layer'),name:'Nueva capa',order:m.layers.length,visible:true,opacity:1,style:{color:'#d4b27a'}});await saveMapAndRefresh(e)});
-    $$('[data-remove-layer]').forEach(btn=>btn.onclick=async()=>{const item=m.layers[Number(btn.dataset.removeLayer)];if(!item)return;m.layers.splice(Number(btn.dataset.removeLayer),1);m.elements.forEach(el=>el.layerIds=(el.layerIds||[]).filter(id=>id!==item.id));await saveMapAndRefresh(e)});
+    $$('[data-remove-layer]').forEach(btn=>btn.onclick=async()=>{const item=m.layers[Number(btn.dataset.removeLayer)];if(!item)return;m.layers.splice(Number(btn.dataset.removeLayer),1);cleanupMapReferences(m,item);await saveMapAndRefresh(e)});
     $('[data-add-level]')?.addEventListener('click',async()=>{m.levels.push({id:mapUid('level'),name:'Nuevo nivel',order:m.levels.length,elevation:'',visible:true,default:!m.levels.length});await saveMapAndRefresh(e)});
-    $$('[data-remove-level]').forEach(btn=>btn.onclick=async()=>{const item=m.levels[Number(btn.dataset.removeLevel)];if(!item)return;m.levels.splice(Number(btn.dataset.removeLevel),1);m.elements.forEach(el=>{el.levelIds=(el.levelIds||[]).filter(id=>id!==item.id);if(el.nodeLevels)el.nodeLevels=el.nodeLevels.map(id=>id===item.id?'':id)});await saveMapAndRefresh(e)});
+    $$('[data-remove-level]').forEach(btn=>btn.onclick=async()=>{const item=m.levels[Number(btn.dataset.removeLevel)];if(!item)return;m.levels.splice(Number(btn.dataset.removeLevel),1);cleanupMapReferences(m,item);if(m.levels.length&&!m.levels.some(l=>l.default))m.levels[0].default=true;await saveMapAndRefresh(e)});
     $$('[data-default-level]').forEach(r=>r.onchange=async()=>{m.levels.forEach((l,i)=>l.default=i===Number(r.dataset.defaultLevel));await saveMapAndRefresh(e)});
 
     $$('[data-route-layer-pref]').forEach(c=>c.onchange=async()=>{const key=c.dataset.routeLayerPref==='restricted'?'restrictedLayerIds':'preferredLayerIds';updateListFromChecks(m.settings.routeDefaults[key],c.checked,c.value);await saveMapAndRefresh(e)});
 
-    $$('[data-draw-tool]').forEach(btn=>btn.onclick=()=>{const mode=btn.dataset.drawTool;placeMapTool={mode:mode==='point'?'draw-point':mode==='line'?'draw-line':mode==='zone'?'draw-zone':'draw-route',mapId:m.id,nodes:[]};refreshPlaceTab(e)});
+    $$('[data-draw-tool]').forEach(btn=>btn.onclick=()=>{if(!m.image?.src){alert('Carga primero una imagen base.');return}const mode=btn.dataset.drawTool;placeMapTool={mode:mode==='point'?'draw-point':mode==='line'?'draw-line':mode==='zone'?'draw-zone':'draw-route',mapId:m.id,nodes:[]};refreshPlaceTab(e)});
     $('[data-finish-map-tool]')?.addEventListener('click',()=>finishMapTool(e,m));
     $('[data-cancel-map-tool]')?.addEventListener('click',()=>{placeMapTool=null;refreshPlaceTab(e)});
 
     $$('[data-select-map-element]').forEach(btn=>btn.onclick=()=>{selectedPlaceMapElementId=btn.dataset.selectMapElement;placeMapTool=null;refreshPlaceTab(e)});
-    $$('[data-delete-map-element]').forEach(btn=>btn.onclick=async()=>{const idx=m.elements.findIndex(x=>x.id===btn.dataset.deleteMapElement);if(idx<0)return;m.elements.splice(idx,1);if(selectedPlaceMapElementId===btn.dataset.deleteMapElement)selectedPlaceMapElementId="";await saveMapAndRefresh(e)});
+    $$('[data-delete-map-element]').forEach(btn=>btn.onclick=async()=>{const idx=m.elements.findIndex(x=>x.id===btn.dataset.deleteMapElement);if(idx<0)return;const removed=m.elements[idx];m.elements.splice(idx,1);cleanupMapReferences(m,removed);if(selectedPlaceMapElementId===btn.dataset.deleteMapElement)selectedPlaceMapElementId="";await saveMapAndRefresh(e)});
     $$('[data-element-visible]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementVisible);if(el){el.visible=c.checked;await saveMapAndRefresh(e)}});
     $$('[data-element-layer]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLayer);if(el){el.layerIds||=[];updateListFromChecks(el.layerIds,c.checked,c.value);await saveMapAndRefresh(e)}});
     $$('[data-element-level]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLevel);if(el){el.levelIds||=[];updateListFromChecks(el.levelIds,c.checked,c.value);await saveMapAndRefresh(e)}});
@@ -2532,7 +2580,7 @@
     $$('[data-generator-list]').forEach(c=>c.onchange=async()=>{const arr=m.generator[c.dataset.generatorList];updateListFromChecks(arr,c.checked,c.value);await saveEntityDirect(e)});
     $('[data-generate-route]')?.addEventListener('click',()=>generateRouteProposal(e,m));
 
-    $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),min=Number(m.settings.visual.zoomMin)||.5,max=Number(m.settings.visual.zoomMax)||4;if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
+    $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4,min=Math.min(a,b),max=Math.max(a,b);if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
 
     wireMapStage(e,m);
   }
