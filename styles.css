@@ -1333,3 +1333,134 @@ body:not(.edit-mode) .media-drag-surface{display:none!important}
   .embedded-media.media-left.effective-left{float:left!important}
   .embedded-media.media-right.effective-right{float:right!important}
 }
+
+/* A6.7.0 — controles de multimedia más estables y con ajuste vertical manual */
+.embedded-media{min-width:140px}
+.embedded-media.effective-left,
+.embedded-media.effective-right{
+  margin-top:calc(2px + var(--media-offset-px,0px))!important;
+}
+.embedded-media-frame .media-controls{
+  display:grid!important;
+  grid-template-columns:26px 26px minmax(110px,1fr) 26px!important;
+  grid-template-rows:24px!important;
+  gap:6px!important;
+  align-items:center!important;
+  left:6px!important;right:6px!important;bottom:6px!important;
+  padding:6px!important;
+}
+.media-controls .media-shift,
+.media-controls .media-remove{
+  width:26px!important;height:24px!important;line-height:1!important;
+  font-size:12px!important;padding:0!important;
+}
+.media-controls .media-shift[data-media-shift="-1"]{grid-column:1!important;grid-row:1!important;display:inline-flex!important;align-items:center;justify-content:center}
+.media-controls .media-shift[data-media-shift="1"]{grid-column:2!important;grid-row:1!important;display:inline-flex!important;align-items:center;justify-content:center}
+.media-controls .media-size{grid-column:3!important;grid-row:1!important;min-width:110px!important;width:100%!important}
+.media-controls .media-remove{grid-column:4!important;grid-row:1!important}
+.media-controls .media-size::-webkit-slider-runnable-track{height:6px}
+.media-controls .media-size::-webkit-slider-thumb{margin-top:-5px}
+.media-controls .media-size::-moz-range-track{height:6px}
+.media-controls .media-size::-moz-range-thumb{height:16px;width:16px}
+@media(max-width:760px){
+  .embedded-media{min-width:120px}
+  .embedded-media-frame .media-controls{grid-template-columns:24px 24px minmax(90px,1fr) 24px!important;gap:4px!important}
+}
+
+/* ============================================================
+   A6.7.1 — flujo unificado texto + multimedia
+   Solo sustituye la simulación vertical anterior.
+   ============================================================ */
+.rich-paragraph{overflow:visible!important}
+.embedded-media{
+  display:block;
+  transition:none!important;
+  vertical-align:top;
+}
+.embedded-media.effective-left{
+  float:left!important;
+  width:var(--media-size,34%)!important;
+  margin:4px 15px 10px 0!important;
+  min-width:0!important;
+  max-width:46%!important;
+  shape-outside:none!important;
+}
+.embedded-media.effective-right{
+  float:right!important;
+  width:var(--media-size,34%)!important;
+  margin:4px 0 10px 15px!important;
+  min-width:0!important;
+  max-width:46%!important;
+  shape-outside:none!important;
+}
+.embedded-media.effective-center{
+  float:none!important;
+  clear:none!important;
+  width:var(--media-size,34%)!important;
+  min-width:0!important;
+  max-width:92%!important;
+  margin:0!important;
+}
+.media-anchor-center{
+  display:block!important;
+  clear:both!important;
+  margin:9px 0 13px!important;
+}
+.media-anchor-center .media-horizontal-row{
+  display:flex!important;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+  width:100%!important;
+}
+.media-horizontal-row .embedded-media.effective-center{
+  flex:0 0 var(--media-size,34%)!important;
+}
+.embedded-media-frame{
+  display:block;
+  position:relative;
+  width:100%;
+}
+.embedded-media-frame img,.embedded-media-frame video{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+}
+.media-caption{
+  display:block;
+  margin-top:5px;
+  text-align:center;
+  line-height:1.35;
+}
+/* Controles actuales: no participan en el flujo de texto. */
+.embedded-media-frame .media-controls{
+  position:absolute!important;
+  left:6px!important;right:6px!important;bottom:6px!important;
+  display:grid!important;
+  grid-template-columns:26px 26px minmax(90px,1fr) 26px!important;
+  grid-template-rows:24px!important;
+  gap:5px!important;
+  align-items:center!important;
+  margin:0!important;padding:5px!important;
+  z-index:7!important;
+  border-radius:7px!important;
+  background:rgba(12,16,21,.78)!important;
+  opacity:.28!important;
+}
+.embedded-media:hover .media-controls,.embedded-media.is-dragging .media-controls{opacity:.95!important}
+.media-controls .media-shift{display:inline-flex!important;align-items:center;justify-content:center}
+.media-controls .media-shift[data-media-shift="-1"]{grid-column:1!important;grid-row:1!important}
+.media-controls .media-shift[data-media-shift="1"]{grid-column:2!important;grid-row:1!important}
+.media-controls .media-size{grid-column:3!important;grid-row:1!important;width:100%!important;min-width:90px!important}
+.media-controls .media-remove{grid-column:4!important;grid-row:1!important;width:26px!important;height:24px!important}
+body:not(.edit-mode) .media-drag-surface{display:none!important}
+@media(max-width:760px){
+  .embedded-media.effective-left,.embedded-media.effective-right{
+    float:none!important;
+    width:var(--media-size,45%)!important;
+    max-width:92%!important;
+    margin:8px auto 13px!important;
+  }
+}
