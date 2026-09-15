@@ -137,3 +137,10 @@ Correcciones funcionales: regex de rutas internas y extensiones; cancelación de
 - Izquierda/derecha usan ajuste de texto; el bloque centrado ocupa una fila propia y admite una o varias imágenes.
 - La altura de caída dentro de un párrafo se convierte en anclaje y desplazamiento por líneas para conservar control vertical.
 - Se conserva el deslizador de tamaño y el botón de quitar.
+
+
+## A6.6.6 — flujo lateral multimedia
+- El arrastre vertical calcula la posición por el borde superior real de la multimedia, no por el punto donde se agarró.
+- Las laterales se ajustan a líneas completas mediante offset en píxeles.
+- El tamaño máximo lateral también considera cuánto texto queda debajo del punto de inserción, reduciendo espacios muertos excesivos.
+- Si ya no cabe una lateral útil dentro de sus límites, se muestra centrada.

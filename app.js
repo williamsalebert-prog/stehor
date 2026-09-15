@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.6.5-assisted-media-drag";
+  const APP_BUILD = "A6.6.6-assisted-media-flow";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function syncEditModeUI(){
@@ -1102,7 +1102,7 @@
       out.push({
         id:`media-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
         kind,src,name:file.name,width:dims.width,height:dims.height,
-        position:"center",size:kind==="video"?48:34,anchor:0,offsetLines:0,caption:""
+        position:"center",size:kind==="video"?48:34,anchor:0,offsetLines:0,offsetPx:0,caption:""
       });
     }
     return out;
@@ -1155,7 +1155,8 @@
     const min=Math.max(4,Math.round(limits[0])),max=Math.max(min,Math.round(limits[1]));
     const ratio=(Number(item.width)>0&&Number(item.height)>0)?`${Number(item.width)}/${Number(item.height)}`:"auto";
     const offsetLines=Math.max(0,Number(item.offsetLines)||0);
-    return `<figure class="embedded-media media-${esc(pos)} effective-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%;--media-offset-lines:${offsetLines}">
+    const offsetPx=Number.isFinite(Number(item.offsetPx))?Math.max(0,Number(item.offsetPx)):offsetLines*26;
+    return `<figure class="embedded-media media-${esc(pos)} effective-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%;--media-offset-lines:${offsetLines};--media-offset-px:${offsetPx}px">
       <div class="embedded-media-frame" style="aspect-ratio:${ratio}">${renderMediaElement(item)}${editMode?`<div class="media-drag-surface" title="Arrastra para colocar la imagen"></div>`:""}</div>
       ${editMode?`<div class="media-controls edit-only">
         <input class="media-size" type="range" min="${min}" max="${max}" value="${Math.max(min,Math.min(size,max))}" aria-label="Tamaño">
@@ -1370,7 +1371,7 @@
     const anchor=preferredMediaAnchor(e,textPath);
     const asGroup=items.length>1;
     for(const item of items){
-      item.anchor=anchor;item.offsetLines=0;item.position="center";
+      item.anchor=anchor;item.offsetLines=0;item.offsetPx=0;item.position="center";
       if(asGroup) item.size=Math.min(30,item.size||30);
       arr.push(item);
     }
@@ -1399,8 +1400,7 @@
       limits=[...limits];
 
       if(["left","right"].includes(effective)){
-        // No dejamos una columna lateral tan estrecha que el texto deje de ser cómodo.
-        // En pantallas estrechas se conserva la intención guardada, pero se muestra centrada.
+        // Restricción horizontal: siempre debe quedar una columna de texto legible.
         const minText=Math.max(240,width*.34);
         const sideMax=Math.max(0,((width-minText-16)/width)*100);
         limits[1]=Math.min(limits[1],sideMax);
@@ -1420,6 +1420,31 @@
         limits[1]=Math.min(limits[1],Math.max(limits[0],heightMax));
       }
 
+      // Restricción vertical para laterales. Si la imagen empieza muy abajo y ya
+      // queda poco texto, su tamaño lateral máximo baja. Así evitamos dejar una
+      // gran columna vacía bajo el último renglón sin quitarle al usuario la
+      // posibilidad de empezar la imagen después de una o varias líneas completas.
+      if(["left","right"].includes(effective)){
+        const flow=block.closest('[data-rich-flow]');
+        const paragraphs=flow?[...flow.querySelectorAll('.rich-paragraph')]:[];
+        const anchor=Math.max(0,Math.min(Number(item.anchor)||0,Math.max(0,paragraphs.length-1)));
+        const p=paragraphs[anchor],last=paragraphs.at(-1);
+        if(p&&last&&item.width&&item.height){
+          const pr=p.getBoundingClientRect(),lr=last.getBoundingClientRect();
+          const offsetPx=Number.isFinite(Number(item.offsetPx))?Math.max(0,Number(item.offsetPx)):(Math.max(0,Number(item.offsetLines)||0)*(parseFloat(getComputedStyle(p).lineHeight)||18));
+          const remainingTextHeight=Math.max(0,lr.bottom-(pr.top+offsetPx));
+          const aspect=item.width/item.height;
+          const coverage=.55; // al menos ~55% de la altura lateral debe tener texto disponible
+          const maxMediaHeight=remainingTextHeight/coverage;
+          const verticalMax=(maxMediaHeight*aspect/width)*100;
+          if(Number.isFinite(verticalMax)) limits[1]=Math.min(limits[1],Math.max(0,verticalMax));
+          if(limits[1]<limits[0]){
+            effective="center";
+            limits=[...(mediaRange(item,"center")||[4,70])];
+          }
+        }
+      }
+
       // Si varias imágenes están en el mismo bloque centrado deben caber en la fila.
       if(effective==="center"){
         const row=block.closest('.media-horizontal-row');
@@ -1432,6 +1457,10 @@
       block.style.setProperty("--media-size",`${val}%`);
       block.classList.remove("effective-left","effective-center","effective-right","effective-row");
       block.classList.add(`effective-${effective}`);
+      const anchorP=block.closest('[data-rich-flow]')?.querySelector(`[data-rich-paragraph="${Math.max(0,Number(item.anchor)||0)}"]`);
+      const fallbackLh=anchorP?(parseFloat(getComputedStyle(anchorP).lineHeight)||18):18;
+      const offsetPx=Number.isFinite(Number(item.offsetPx))?Math.max(0,Number(item.offsetPx)):(Math.max(0,Number(item.offsetLines)||0)*fallbackLh);
+      block.style.setProperty("--media-offset-px",`${effective==="center"?0:offsetPx}px`);
       block.style.setProperty("--media-offset-lines",String(Math.max(0,Number(item.offsetLines)||0)));
 
       if(range){
@@ -1468,7 +1497,7 @@
     return best;
   }
 
-  function mediaDropIntent(flow,item,centerX,clientY){
+  function mediaDropIntent(flow,item,centerX,dropTopY,mediaHeight=0){
     const fr=flow.getBoundingClientRect();
     const width=Math.max(1,fr.width);
     const relativeX=(centerX-fr.left)/width;
@@ -1484,21 +1513,32 @@
       else if(relativeX>=.60) mode='right';
     }
 
-    const nearest=nearestParagraphForY(flow,clientY);
-    let anchor=nearest.index,offsetLines=0;
-    if(mode==='center'){
-      // Un bloque centrado vive entre párrafos. Soltar en la mitad superior
-      // lo deja después del párrafo anterior; en la inferior, después del actual.
+    // Para una lateral usamos el BORDE SUPERIOR real de la imagen, no la
+    // posición del puntero. Eso hace que soltarla a la altura de la 2.ª, 3.ª,
+    // etc. línea deje completas las líneas anteriores.
+    if(mode!=='center'){
+      const nearest=nearestParagraphForY(flow,dropTopY);
+      let anchor=nearest.index,offsetLines=0,offsetPx=0;
       if(nearest.el){
         const r=nearest.el.getBoundingClientRect();
-        if(clientY<r.top+r.height*.5 && anchor>0) anchor-=1;
+        const lh=parseFloat(getComputedStyle(nearest.el).lineHeight)||18;
+        const lines=paragraphLineCount(flow,anchor);
+        offsetLines=Math.max(0,Math.min(lines-1,Math.round((dropTopY-r.top)/lh)));
+        offsetPx=offsetLines*lh;
       }
-    }else if(nearest.el){
-      const r=nearest.el.getBoundingClientRect();
-      const lh=parseFloat(getComputedStyle(nearest.el).lineHeight)||18;
-      offsetLines=Math.max(0,Math.min(paragraphLineCount(flow,anchor)-1,Math.floor((clientY-r.top)/lh)));
+      return {mode,anchor,offsetLines,offsetPx};
     }
-    return {mode,anchor,offsetLines};
+
+    // El bloque centrado vive entre párrafos. Aquí interesa el centro visual de
+    // la imagen para decidir arriba/debajo, no dónde la agarró el usuario.
+    const centerY=dropTopY+Math.max(0,mediaHeight)*.5;
+    const nearest=nearestParagraphForY(flow,centerY);
+    let anchor=nearest.index;
+    if(nearest.el){
+      const r=nearest.el.getBoundingClientRect();
+      if(centerY<r.top+r.height*.5 && anchor>0) anchor-=1;
+    }
+    return {mode:'center',anchor,offsetLines:0,offsetPx:0};
   }
 
   function clearMediaDragPreview(block){
@@ -1519,8 +1559,8 @@
         const flow=block.closest('[data-rich-flow]');if(!flow)return;
         const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
         const startRect=block.getBoundingClientRect();
-        const grabX=ev.clientX-startRect.left;
-        const state={pointerId:ev.pointerId,startX:ev.clientX,startY:ev.clientY,startRect,grabX};
+        const grabX=ev.clientX-startRect.left,grabY=ev.clientY-startRect.top;
+        const state={pointerId:ev.pointerId,startX:ev.clientX,startY:ev.clientY,startRect,grabX,grabY};
         block.classList.add('is-dragging');
         try{surface.setPointerCapture(ev.pointerId)}catch{}
 
@@ -1529,7 +1569,8 @@
           const dx=moveEv.clientX-state.startX,dy=moveEv.clientY-state.startY;
           block.style.transform=`translate3d(${dx}px,${dy}px,0)`;
           const centerX=moveEv.clientX+(state.startRect.width*.5-state.grabX);
-          const intent=mediaDropIntent(flow,item,centerX,moveEv.clientY);
+          const dropTopY=moveEv.clientY-state.grabY;
+          const intent=mediaDropIntent(flow,item,centerX,dropTopY,state.startRect.height);
           block.classList.remove('drag-intent-left','drag-intent-right','drag-intent-center');
           block.classList.add(`drag-intent-${intent.mode}`);
           state.intent=intent;
@@ -1540,10 +1581,12 @@
           try{if(surface.hasPointerCapture(upEv.pointerId))surface.releasePointerCapture(upEv.pointerId)}catch{}
           const dx=upEv.clientX-state.startX;
           const centerX=upEv.clientX+(state.startRect.width*.5-state.grabX);
-          const intent=state.intent||mediaDropIntent(flow,item,centerX,upEv.clientY);
+          const dropTopY=upEv.clientY-state.grabY;
+          const intent=state.intent||mediaDropIntent(flow,item,centerX,dropTopY,state.startRect.height);
           item.position=intent.mode;
           item.anchor=intent.anchor;
           item.offsetLines=intent.offsetLines;
+          item.offsetPx=intent.offsetPx||0;
           clearMediaDragPreview(block);
           await saveEntityDirect(e);
           refreshFn(e);
@@ -2685,7 +2728,7 @@
     let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
     const anchor=preferredMediaAnchor(e,textPath),asGroup=items.length>1;
     for(const item of items){
-      item.anchor=anchor;item.offsetLines=0;item.position="center";
+      item.anchor=anchor;item.offsetLines=0;item.offsetPx=0;item.position="center";
       if(asGroup) item.size=Math.min(30,item.size||30);
       arr.push(item);
     }

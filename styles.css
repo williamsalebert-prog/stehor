@@ -1287,3 +1287,11 @@ body:not(.edit-mode) .media-drag-surface{display:none!important}
   .media-anchor-center .media-horizontal-row{flex-wrap:wrap}
   .media-horizontal-row .embedded-media.effective-center{flex-basis:min(var(--media-size,45%),48%)}
 }
+
+
+/* A6.6.6 — ajuste vertical real y control de espacio muerto */
+.embedded-media.effective-left,
+.embedded-media.effective-right{
+  /* La separación vertical ya se guarda en píxeles ajustados a la línea real. */
+  margin-top:calc(4px + var(--media-offset-px,0px));
+}
