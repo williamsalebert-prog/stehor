@@ -1,18 +1,18 @@
 :root{
-  --bg:#100c09;
-  --bg-deep:#0b0806;
-  --panel:#211611;
-  --panel-2:#2a1c16;
-  --panel-3:#35231b;
+  --bg:#11141a;
+  --bg-deep:#0b0e13;
+  --panel:#1b1d24;
+  --panel-2:#23262f;
+  --panel-3:#2d2b36;
   --text:#f2e6d2;
   --muted:#b89c78;
   --muted-2:#8d7456;
-  --line:#6e4b30;
-  --line-soft:rgba(110,75,48,.50);
+  --line:#5f5360;
+  --line-soft:rgba(107,91,108,.42);
   --gold:#d5ae67;
   --gold-hi:#f0d498;
-  --wine:#5c2938;
-  --wine-hi:#713548;
+  --wine:#5e3d59;
+  --wine-hi:#75506d;
   --green:#80b992;
   --shadow:0 16px 38px rgba(0,0,0,.28);
   --sidebar-wide:248px;
@@ -31,7 +31,7 @@ body{
   background:
     radial-gradient(circle at 80% 12%,rgba(111,49,63,.075),transparent 25%),
     radial-gradient(circle at 13% 82%,rgba(127,79,43,.065),transparent 25%),
-    linear-gradient(180deg,#17100d 0%,#110c09 48%,#0d0907 100%);
+    linear-gradient(180deg,#17191f 0%,#12161c 48%,#0d1116 100%);
 }
 body::before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.14;
@@ -65,7 +65,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   display:flex;flex-direction:column;gap:8px;
   padding:10px 9px;
   background:
-    linear-gradient(180deg,rgba(29,19,15,.985),rgba(20,14,11,.995)),
+    linear-gradient(180deg,rgba(30,26,34,.985),rgba(17,23,29,.995)),
     radial-gradient(circle at top,rgba(213,174,103,.04),transparent 32%);
   border-right:1px solid var(--line-soft);
   backdrop-filter:blur(16px)
@@ -1071,3 +1071,56 @@ textarea.big{
 .map-cluster circle{fill:#563f5f;stroke:#d8b87c;stroke-width:.2;vector-effect:non-scaling-stroke}.map-cluster text{fill:#fff0d4;font-size:1.8px;text-anchor:middle;dominant-baseline:middle;font-family:system-ui,sans-serif}.map-north{pointer-events:none}.map-north path{fill:#e3c48c;stroke:#e3c48c;stroke-width:.22;vector-effect:non-scaling-stroke}.map-north text{fill:#f0dab0;font-size:2.3px;text-anchor:middle;font-family:Georgia,serif}
 .layer-row{grid-template-columns:minmax(105px,1.25fr) 55px 70px 34px 65px 65px 62px auto auto}.map-inline-select{max-width:120px;border:1px solid rgba(212,178,122,.12);border-radius:5px;background:rgba(0,0,0,.22);color:#d7c5aa;font-size:7.5px;padding:2px 4px}.route-waypoints{max-height:none;padding:7px;border:1px solid rgba(212,178,122,.07);border-radius:7px}.route-waypoints strong{color:#cdb99c;font-size:8px}
 @media(max-width:1180px){.layer-row{grid-template-columns:1fr 1fr 1fr 42px}.layer-row>*:nth-child(n+5){grid-column:auto}}
+
+
+/* A6.6.2 — modo normal / edición y multimedia estable */
+.edit-mode-toggle{
+  position:fixed;z-index:50;right:14px;top:12px;
+  border:1px solid rgba(212,178,122,.22);border-radius:999px;
+  background:rgba(22,26,33,.88);color:#d8c4a5;padding:7px 12px;font-size:9px;
+  backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.18)
+}
+.edit-mode-toggle:hover{border-color:rgba(236,207,152,.45);color:#f4e4ca;background:rgba(49,43,55,.94)}
+body.edit-mode .edit-mode-toggle{background:linear-gradient(180deg,rgba(84,64,91,.92),rgba(44,67,81,.92));color:#fff0d5}
+body:not(.edit-mode) .edit-only{display:none!important}
+.direct-edit.readonly{cursor:default;min-height:0}
+.direct-edit.readonly:focus{background:none;box-shadow:none}
+.item-card-wrap{position:relative}
+.item-card-wrap>.item-card{width:100%}
+.entity-remove{position:absolute;right:5px;top:5px;width:24px;height:24px;border-radius:50%;border:1px solid rgba(214,145,145,.28);background:rgba(34,20,24,.88);color:#dca1a1}
+.category-add{margin-left:auto;border:1px solid rgba(212,178,122,.18);border-radius:8px;background:rgba(29,33,41,.88);color:#d7c1a0;padding:7px 10px;font-size:9px}
+.character-portrait{position:relative}
+.portrait-controls{position:absolute;left:8px;right:8px;bottom:8px;display:flex;justify-content:center;gap:6px;opacity:.15;transition:opacity .12s ease}
+.character-portrait:hover .portrait-controls{opacity:1}
+.portrait-controls button{border:1px solid rgba(236,207,152,.25);border-radius:7px;background:rgba(12,16,21,.88);color:#ead8ba;padding:5px 8px;font-size:8px}
+.rich-content-flow{display:block;min-height:1px}
+.rich-paragraph{margin:0 0 9px;min-height:1.35em;outline:none}
+.rich-paragraph[contenteditable="true"]:focus{background:rgba(214,180,121,.045);box-shadow:inset 0 -1px rgba(214,180,121,.22);border-radius:4px}
+.media-anchor-group{display:contents}
+.rich-clear{clear:both;height:0}
+.embedded-media{width:var(--media-size,34%);max-width:100%;margin:4px 0 10px;transition:none;break-inside:avoid}
+.embedded-media.effective-left{float:left;margin:4px 15px 10px 0}
+.embedded-media.effective-right{float:right;margin:4px 0 10px 15px}
+.embedded-media.effective-center{float:none;margin:8px auto 13px}
+.embedded-media-frame{overflow:hidden;border:1px solid rgba(212,178,122,.18);border-radius:9px;background:#11151a;min-height:24px}
+.embedded-media-frame img,.embedded-media-frame video{display:block;width:100%;height:100%;max-height:72vh;object-fit:contain;background:#0f1216}
+.media-controls{display:flex;align-items:center;gap:4px;margin-top:4px;opacity:.42;transition:opacity .12s ease}
+.embedded-media:hover .media-controls{opacity:1}
+.media-controls .media-size{min-width:78px;flex:1}
+.media-shift{min-width:25px}
+.research-value{color:#dfd0bb;font-size:10px;line-height:1.5;padding:5px 0}
+
+/* El resto del programa acompaña la mezcla vino/petróleo sin copiar el degradado de las fichas. */
+.main{background:linear-gradient(180deg,rgba(16,20,26,.20),rgba(11,14,19,.28))}
+.sidebar{background:linear-gradient(180deg,rgba(31,27,36,.985),rgba(18,24,30,.995)),radial-gradient(circle at top,rgba(213,174,103,.035),transparent 34%)}
+.home-cluster{background:linear-gradient(135deg,rgba(50,38,49,.44),rgba(28,37,46,.42));border-color:rgba(122,98,111,.42)}
+.nav-item:hover,.footer-action:hover{background:linear-gradient(90deg,rgba(78,59,82,.30),rgba(42,62,74,.24))}
+.nav-item.active{background:linear-gradient(90deg,rgba(91,68,96,.52),rgba(45,69,83,.48));border-color:rgba(212,178,122,.22)}
+
+@media(max-width:760px){
+  .edit-mode-toggle{right:8px;top:8px}
+  .embedded-media.effective-left,.embedded-media.effective-right{float:none;margin:8px auto 13px}
+}
+
+body:not(.edit-mode) .map-node-handle,body:not(.edit-mode) .map-tool-preview{display:none!important}
+body:not(.edit-mode) [contenteditable="true"]{cursor:default}

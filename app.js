@@ -1,6 +1,32 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.6.1-lugares-mapas-qa";
+  const APP_BUILD = "A6.6.2-edicion-media-cache";
+  let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
+
+  function syncEditModeUI(){
+    document.body.classList.toggle("edit-mode",editMode);
+    const btn=document.getElementById("editModeBtn");
+    if(btn){btn.textContent=editMode?"Listo":"Editar";btn.setAttribute("aria-pressed",editMode?"true":"false");btn.title=editMode?"Volver a modo normal":"Editar esta wiki"}
+  }
+
+  function rerenderCurrentView(){
+    if(currentView.type==="entity"){
+      const activeCharacter=document.querySelector('[data-character-tab].active')?.dataset.characterTab;
+      const activePlace=document.querySelector('[data-place-tab].active')?.dataset.placeTab;
+      showEntity(currentView.id,activeCharacter||activePlace||"overview");
+    }
+    else if(currentView.type==="category") showCategory(currentView.id);
+    else if(currentView.type==="home") showHome();
+    else if(currentView.type==="registry") showRegistry();
+    else if(currentView.type==="linker") showLinker();
+  }
+
+  function toggleEditMode(){
+    editMode=!editMode;
+    localStorage.setItem("sethoria-edit-mode",editMode?"1":"0");
+    syncEditModeUI();
+    rerenderCurrentView();
+  }
   const STORE = "entities";
 
   let db;
@@ -216,23 +242,22 @@
       r.onerror=()=>reject(r.error);
     });
   }
+  function deleteEntityById(id){
+    return new Promise((resolve,reject)=>{
+      const r=store("readwrite").delete(id);
+      r.onsuccess=()=>resolve();
+      r.onerror=()=>reject(r.error);
+    });
+  }
   async function ensureSeed(){
-    const all=await getAll();
-    if(!all.length){
-      for(const e of window.SETHORIA_DEMO.seedEntities) await putEntity(e);
-      localStorage.setItem("sethoria-demo-build","a66");
-      return getAll();
+    let all=await getAll();
+    if(localStorage.getItem("sethoria-no-demo-migration")!=="1"){
+      const demos=all.filter(e=>String(e.id||"").startsWith("demo-"));
+      for(const e of demos) await deleteEntityById(e.id);
+      localStorage.setItem("sethoria-no-demo-migration","1");
+      all=await getAll();
     }
-
-    // La demo se migra una sola vez a la estructura A6.6. Después, incluso
-    // los registros demo-* quedan editables y no se vuelven a sobrescribir.
-    if(localStorage.getItem("sethoria-demo-build")!=="a66"){
-      for(const seed of (window.SETHORIA_DEMO.seedEntities||[])){
-        if(String(seed.id||"").startsWith("demo-")) await putEntity(seed);
-      }
-      localStorage.setItem("sethoria-demo-build","a66");
-    }
-    return getAll();
+    return all;
   }
 
   function toast(message){
@@ -335,12 +360,26 @@
       <div class="page-head">
         ${backButton()}
         <h1 class="page-title">${esc(categoryName(id))}</h1>
+        ${editMode?`<button class="category-add edit-only" data-add-entity>＋ Agregar</button>`:""}
       </div>
-      ${list.length ? `<div class="cards-grid">${list.map(itemCard).join("")}</div>` : `<div class="empty">Sin elementos todavía.</div>`}
+      ${list.length ? `<div class="cards-grid">${list.map(e=>`<div class="item-card-wrap">${itemCard(e)}${editMode?`<button class="entity-remove edit-only" data-remove-entity="${e.id}" title="Quitar">×</button>`:""}</div>`).join("")}</div>` : `<div class="empty">Sin elementos todavía.</div>`}
     `;
 
     $("#pageBack").onclick=showHome;
     $$("[data-item]").forEach(btn=>btn.onclick=()=>showEntity(btn.dataset.item));
+    $('[data-add-entity]')?.addEventListener('click',async()=>{
+      const title=prompt('Nombre:');if(!title||!title.trim())return;
+      const slug=title.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+      const e={id:`${id}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,title:title.trim(),category:id,masterTag:`${id}_${slug}`,aliases:[],tags:[],summary:''};
+      if(id==='personajes')e.character={};
+      if(id==='lugares')e.place={};
+      await putEntity(e);entities=await getAll();showCategory(id);
+    });
+    $$('[data-remove-entity]').forEach(btn=>btn.onclick=async ev=>{
+      ev.stopPropagation();const e=entities.find(x=>x.id===btn.dataset.removeEntity);if(!e)return;
+      if(!confirm(`¿Quitar ${e.title}?`))return;
+      await deleteEntityById(e.id);entities=await getAll();showCategory(id);
+    });
   }
 
   // ---------------------------
@@ -756,7 +795,7 @@
 
   // ============================================================
   // PERSONAJES — A6.5
-  // Wiki personal: edición directa, sin modo de edición.
+  // Wiki personal: lectura limpia + modo de edición discreto.
   // ============================================================
 
   const CHARACTER_TABS = [
@@ -830,12 +869,14 @@
   function renderEditable(value,path,e,{lines=false,cls="",placeholder="—"}={}){
     const raw=editableRaw(value,lines?"lines":"text");
     const shown=raw || placeholder;
+    if(!editMode) return `<div class="direct-edit readonly ${cls}">${linkifyText(shown,e.id)}</div>`;
     return `<div class="direct-edit ${cls}" contenteditable="true" spellcheck="true"
       data-edit-path="${esc(path)}" data-edit-type="${lines?"lines":"text"}"
       data-edit-empty="${esc(placeholder)}">${linkifyText(shown,e.id)}</div>`;
   }
 
   function wireDirectEditors(e){
+    if(!editMode) return;
     $$('[data-edit-path]').forEach(el=>{
       el.onfocus=()=>{
         if(el.dataset.editing==="1") return;
@@ -906,6 +947,17 @@
     ];
   }
 
+  async function choosePortrait(e,refresh){
+    const file=await new Promise(resolve=>{const input=document.createElement("input");input.type="file";input.accept="image/*,.gif";input.onchange=()=>resolve(input.files?.[0]||null);input.click()});
+    if(!file)return;const kind=mediaKind(file);if(kind!=="image"){alert("El retrato debe ser una imagen o GIF.");return}
+    e.image=await readFileDataURL(file);await saveEntityDirect(e);refresh();
+  }
+
+  function portraitControls(kind){
+    if(!editMode)return "";
+    return `<div class="portrait-controls edit-only"><button data-change-cover="${kind}">Cambiar</button><button data-remove-cover="${kind}" title="Quitar">×</button></div>`;
+  }
+
   function renderCharacterInfobox(e){
     normalizeInfo(e);
     const image=getImage(e);
@@ -913,6 +965,7 @@
       <div class="character-portrait-shell">
         <div class="character-portrait">
           ${image?`<img src="${esc(image)}" alt="">`:`<div class="character-portrait-placeholder">${icon("personajes")}</div>`}
+          ${portraitControls("character")}
         </div>
         <div class="portrait-ornament"></div>
       </div>
@@ -969,24 +1022,24 @@
     return {
       id:`media-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
       kind,src,name:file.name,width:dims.width,height:dims.height,
-      position:"center",size:kind==="video"?65:50,caption:""
+      position:"center",size:kind==="video"?48:34,anchor:0,caption:""
     };
   }
 
   function mediaRange(item,position){
     const w=Number(item.width)||1,h=Number(item.height)||1,aspect=w/h;
     if(position==="center"){
-      if(aspect<.65) return [25,42];
-      if(aspect<.85) return [28,48];
-      if(aspect<=1.25) return [34,62];
-      if(aspect<=2.2) return [44,78];
-      return [55,90];
+      if(aspect<.65) return [12,42];
+      if(aspect<.85) return [12,50];
+      if(aspect<=1.25) return [14,64];
+      if(aspect<=2.2) return [18,78];
+      return [22,90];
     }
-    if(aspect>2.2) return null;
-    if(aspect<.65) return [20,30];
-    if(aspect<.85) return [22,34];
-    if(aspect<=1.25) return [25,42];
-    return [30,45];
+    if(aspect>2.6) return null;
+    if(aspect<.65) return [10,30];
+    if(aspect<.85) return [10,35];
+    if(aspect<=1.25) return [12,42];
+    return [14,46];
   }
 
   function renderMediaElement(item){
@@ -995,22 +1048,58 @@
     return `<img src="${esc(item.src)}" alt="">`;
   }
 
-  function renderEmbeddedMedia(media,path,e){
-    return toArray(media).map((item,i)=>{
-      const pos=item.position||"center";
-      const size=Number(item.size)||50;
-      return `<figure class="embedded-media media-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%">
-        <div class="embedded-media-frame">${renderMediaElement(item)}</div>
-        <div class="media-controls">
-          <button class="media-pos ${pos==="left"?"active":""}" data-media-position="left" title="Izquierda">←</button>
-          <button class="media-pos ${pos==="center"?"active":""}" data-media-position="center" title="Centro">•</button>
-          <button class="media-pos ${pos==="right"?"active":""}" data-media-position="right" title="Derecha">→</button>
-          <input class="media-size" type="range" value="${size}" aria-label="Tamaño">
-          <button class="media-remove" data-media-remove title="Quitar">×</button>
-        </div>
-        ${renderEditable(item.caption||"",`${path}.${i}.caption`,e,{cls:"media-caption",placeholder:"Pie opcional"})}
-      </figure>`;
-    }).join("");
+  function splitRichParagraphs(value){
+    const raw=editableRaw(value);
+    const parts=raw.split(/\n\s*\n/).map(x=>x.trim());
+    return parts.length?parts:[""];
+  }
+
+  function renderSingleEmbeddedMedia(item,path,i,e){
+    const pos=item.position||"center";
+    const size=Number(item.size)||34;
+    const limits=mediaRange(item,pos)||[12,70];
+    const min=Math.round(limits[0]),max=Math.round(limits[1]);
+    const ratio=(Number(item.width)>0&&Number(item.height)>0)?`${Number(item.width)}/${Number(item.height)}`:"auto";
+    return `<figure class="embedded-media media-${esc(pos)} effective-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%">
+      <div class="embedded-media-frame" style="aspect-ratio:${ratio}">${renderMediaElement(item)}</div>
+      ${editMode?`<div class="media-controls edit-only">
+        <button class="media-shift" data-media-shift="-1" title="Mover antes">↑</button>
+        <button class="media-shift" data-media-shift="1" title="Mover después">↓</button>
+        <button class="media-pos ${pos==="left"?"active":""}" data-media-position="left" title="Izquierda">←</button>
+        <button class="media-pos ${pos==="center"?"active":""}" data-media-position="center" title="Centro">•</button>
+        <button class="media-pos ${pos==="right"?"active":""}" data-media-position="right" title="Derecha">→</button>
+        <input class="media-size" type="range" min="${min}" max="${max}" value="${Math.max(min,Math.min(size,max))}" aria-label="Tamaño">
+        <button class="media-remove" data-media-remove title="Quitar">×</button>
+      </div>`:""}
+      ${renderEditable(item.caption||"",`${path}.${i}.caption`,e,{cls:"media-caption",placeholder:editMode?"Pie opcional":""})}
+    </figure>`;
+  }
+
+  function renderRichFlow(value,path,media,mediaPath,e){
+    const paragraphs=splitRichParagraphs(value);
+    const items=toArray(media);
+    const buckets=new Map();
+    items.forEach((item,i)=>{
+      let anchor=Number.isFinite(Number(item.anchor))?Number(item.anchor):0;
+      anchor=Math.max(0,Math.min(anchor,Math.max(0,paragraphs.length-1)));
+      item.anchor=anchor;
+      if(!buckets.has(anchor))buckets.set(anchor,[]);
+      buckets.get(anchor).push([item,i]);
+    });
+    let html='<div class="rich-content-flow" data-rich-flow data-rich-path="'+esc(path)+'">';
+    paragraphs.forEach((p,pi)=>{
+      if(editMode){
+        html+=`<p class="rich-paragraph character-prose" contenteditable="true" spellcheck="true" data-rich-paragraph="${pi}" data-rich-path="${esc(path)}">${esc(p||"")}</p>`;
+      }else{
+        html+=`<p class="rich-paragraph character-prose">${linkifyText(p||"",e.id)}</p>`;
+      }
+      const group=buckets.get(pi)||[];
+      if(group.length){
+        html+=`<div class="media-anchor-group" data-anchor="${pi}">${group.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div>`;
+      }
+    });
+    html+='<div class="rich-clear"></div></div>';
+    return html;
   }
 
   function richSection(e,{title,path,mediaPath,titlePath="",removeAction="",addMedia=true}){
@@ -1019,13 +1108,10 @@
     return `<section class="character-section media-aware-block">
       <div class="section-title-row">
         ${titlePath?`<h2 class="editable-heading">${renderEditable(title,titlePath,e,{cls:"heading-editor",placeholder:"Título"})}</h2>`:`<h2>${esc(title)}</h2>`}
-        ${removeAction?`<button class="section-remove" ${removeAction}>×</button>`:""}
+        ${editMode&&removeAction?`<button class="section-remove edit-only" ${removeAction}>×</button>`:""}
       </div>
-      <div class="rich-content-flow">
-        ${renderEmbeddedMedia(media,mediaPath,e)}
-        ${renderEditable(value,path,e,{cls:"character-prose editable-long-text",placeholder:"—"})}
-      </div>
-      ${addMedia?`<button class="inline-add-media" data-add-media="${esc(mediaPath)}">＋ Multimedia</button>`:""}
+      ${renderRichFlow(value,path,media,mediaPath,e)}
+      ${editMode&&addMedia?`<button class="inline-add-media edit-only" data-add-media="${esc(mediaPath)}" data-media-text-path="${esc(path)}">＋ Multimedia</button>`:""}
     </section>`;
   }
 
@@ -1034,11 +1120,8 @@
     c.introMedia ||= [];
     return `<div class="character-content-stack">
       <section class="character-intro-card media-aware-block">
-        <div class="rich-content-flow">
-          ${renderEmbeddedMedia(c.introMedia,"character.introMedia",e)}
-          ${renderEditable(e.summary||"","summary",e,{cls:"character-prose editable-long-text",placeholder:"—"})}
-        </div>
-        <button class="inline-add-media" data-add-media="character.introMedia">＋ Multimedia</button>
+        ${renderRichFlow(e.summary||"","summary",c.introMedia,"character.introMedia",e)}
+        ${editMode?`<button class="inline-add-media edit-only" data-add-media="character.introMedia" data-media-text-path="summary">＋ Multimedia</button>`:""}
       </section>
       ${PROFILE_FIELDS.map(([key,label])=>{
         c.profileMedia[key] ||= [];
@@ -1065,7 +1148,7 @@
         c.history[i].media ||= [];
         return richSection(e,{title:c.history[i].title||`Apartado ${i+1}`,titlePath:`character.history.${i}.title`,path:`character.history.${i}.body`,mediaPath:`character.history.${i}.media`,removeAction:`data-remove-history="${i}"`});
       }).join("")}
-      <button class="section-add" data-add-history>＋ Apartado</button>
+      ${editMode?`<button class="section-add edit-only" data-add-history>＋ Apartado</button>`:""}
     </div>`;
   }
 
@@ -1078,7 +1161,7 @@
     const c=normalizeInfo(e);
     return `<div class="character-content-stack">
       ${BOND_GROUPS.map(([key,label])=>`<section class="character-section">
-        <div class="section-title-row"><h2>${label}</h2><button class="bond-add" data-add-bond="${key}">＋ Lazo</button></div>
+        <div class="section-title-row"><h2>${label}</h2>${editMode?`<button class="bond-add edit-only" data-add-bond="${key}">＋ Lazo</button>`:""}</div>
         <div class="bond-detail-stack">
           ${c.relationships[key].map((item,i)=>{
             const target=relationTarget(item);
@@ -1088,7 +1171,7 @@
                   ${target?`<button class="text-button bond-name-link" data-open-related="${target.id}">${esc(target.title)}</button>`:`<strong>Entidad no encontrada</strong>`}
                   ${renderEditable(item.type||"",`character.relationships.${key}.${i}.type`,e,{cls:"bond-type-edit",placeholder:"Aclaración opcional"})}
                 </div>
-                <button class="bond-remove" data-remove-bond="${key}" data-bond-index="${i}">×</button>
+                ${editMode?`<button class="bond-remove edit-only" data-remove-bond="${key}" data-bond-index="${i}">×</button>`:""}
               </div>
               ${renderEditable(item.note||"",`character.relationships.${key}.${i}.note`,e,{cls:"character-prose bond-note-edit",placeholder:"Texto opcional"})}
             </article>`;
@@ -1101,12 +1184,12 @@
   function renderCharacterGallery(e){
     const c=normalizeInfo(e);
     return `<section class="character-section gallery-section">
-      <div class="section-title-row"><h2>Galería</h2><button class="gallery-add" data-add-gallery>＋ Multimedia</button></div>
+      <div class="section-title-row"><h2>Galería</h2>${editMode?`<button class="gallery-add edit-only" data-add-gallery>＋ Multimedia</button>`:""}</div>
       <div class="character-gallery-grid">
         ${c.gallery.map((item,i)=>`<article class="character-gallery-card">
           ${renderMediaElement(item)}
           ${renderEditable(item.caption||"",`character.gallery.${i}.caption`,e,{cls:"gallery-caption direct-gallery-caption",placeholder:"Pie opcional"})}
-          <button class="gallery-remove" data-remove-gallery="${i}">×</button>
+          ${editMode?`<button class="gallery-remove edit-only" data-remove-gallery="${i}">×</button>`:""}
         </article>`).join("") || `<div class="empty">—</div>`}
       </div>
     </section>`;
@@ -1151,7 +1234,7 @@
     if(Array.isArray(r.pending)) r.pending=r.pending.map(x=>typeof x==="string"?x:(x.text||"")).join("\n");
     if(Array.isArray(r.notes)) r.notes=r.notes.map(x=>typeof x==="string"?x:(x.text||x.note||"")).join("\n");
     return `<div class="character-content-stack">
-      <section class="character-section research-choices"><div><h2>Personaje</h2><select data-select-path="character.research.kind"><option ${r.kind==="Inventado"?"selected":""}>Inventado</option><option ${r.kind==="Real"?"selected":""}>Real</option></select></div><div><h2>Estado de desarrollo</h2><select data-select-path="character.research.workStatus"><option ${r.workStatus==="Nuevo"?"selected":""}>Nuevo</option><option ${r.workStatus==="En desarrollo"?"selected":""}>En desarrollo</option><option ${r.workStatus==="Final"?"selected":""}>Final</option></select></div></section>
+      <section class="character-section research-choices"><div><h2>Personaje</h2>${editMode?`<select data-select-path="character.research.kind"><option ${r.kind==="Inventado"?"selected":""}>Inventado</option><option ${r.kind==="Real"?"selected":""}>Real</option></select>`:`<div class="research-value">${esc(r.kind)}</div>`}</div><div><h2>Estado de desarrollo</h2>${editMode?`<select data-select-path="character.research.workStatus"><option ${r.workStatus==="Nuevo"?"selected":""}>Nuevo</option><option ${r.workStatus==="En desarrollo"?"selected":""}>En desarrollo</option><option ${r.workStatus==="Final"?"selected":""}>Final</option></select>`:`<div class="research-value">${esc(r.workStatus)}</div>`}</div></section>
       <section class="character-section"><h2>Fuentes</h2>${renderEditable(r.sources,"character.research.sources",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
       <section class="character-section"><h2>Pendientes</h2>${renderEditable(r.pending,"character.research.pending",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
       <section class="character-section"><h2>Notas</h2>${renderEditable(r.notes,"character.research.notes",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
@@ -1169,9 +1252,11 @@
     return renderCharacterProfile(e);
   }
 
-  async function addMediaAtPath(e,path){
+  async function addMediaAtPath(e,path,textPath=""){
     const item=await chooseMedia();if(!item) return;
     let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
+    const paragraphs=splitRichParagraphs(textPath?getPath(e,textPath):"");
+    item.anchor=Math.max(0,paragraphs.length-1);
     arr.push(item);await saveEntityDirect(e);refreshCharacterTab(e);
   }
 
@@ -1184,25 +1269,22 @@
 
   function applyMediaRules(){
     $$('[data-media-block]').forEach(block=>{
-      const frame=block.querySelector('.embedded-media-frame');
       const range=block.querySelector('.media-size');
       const parent=block.closest('.media-aware-block');
-      const text=parent?.querySelector('.editable-long-text');
-      if(!frame||!range||!parent) return;
+      if(!range||!parent)return;
       const idx=Number(block.dataset.mediaIndex),path=block.dataset.mediaPath;
       const e=entities.find(x=>x.id===currentView.id);if(!e)return;
       const item=getPath(e,`${path}.${idx}`);if(!item)return;
       const width=parent.clientWidth||700;
       let effective=item.position||"center";
       let limits=mediaRange(item,effective);
-      const tooLittleText=(text?.innerText||"").trim().length<180;
-      if(effective!=="center" && (width<720 || tooLittleText || !limits)) effective="center";
-      limits=mediaRange(item,effective)||[35,70];
+      if(effective!=="center" && (width<620 || !limits)) effective="center";
+      limits=mediaRange(item,effective)||[12,70];
       if(effective!=="center"){
-        const minText=Math.max(300,width*.38);
-        const sideMax=Math.max(0,((width-minText-24)/width)*100);
+        const minText=Math.max(220,width*.30);
+        const sideMax=Math.max(0,((width-minText-18)/width)*100);
         limits[1]=Math.min(limits[1],sideMax);
-        if(limits[1]<limits[0]){effective="center";limits=mediaRange(item,"center")||[35,70]}
+        if(limits[1]<limits[0]){effective="center";limits=mediaRange(item,"center")||[12,70]}
       }
       if(item.width){
         const intrinsicMax=(item.width/width)*100;
@@ -1210,11 +1292,11 @@
       }
       if(item.width&&item.height){
         const aspect=item.width/item.height;
-        const heightMax=(window.innerHeight*.70*aspect/width)*100;
+        const heightMax=(window.innerHeight*.72*aspect/width)*100;
         limits[1]=Math.min(limits[1],Math.max(limits[0],heightMax));
       }
-      const val=Math.max(limits[0],Math.min(Number(item.size)||50,limits[1]));
-      range.min=Math.round(limits[0]);range.max=Math.max(Math.round(limits[0]),Math.round(limits[1]));range.value=Math.round(val);
+      const val=Math.max(limits[0],Math.min(Number(item.size)||34,limits[1]));
+      range.min=Math.floor(limits[0]);range.max=Math.max(Math.ceil(limits[0]),Math.ceil(limits[1]));range.value=Math.round(val);
       block.style.setProperty("--media-size",`${val}%`);
       block.classList.remove("effective-left","effective-center","effective-right");
       block.classList.add(`effective-${effective}`);
@@ -1229,6 +1311,19 @@
     const n=Number(answer);return matches[n-1]||null;
   }
 
+  function wireRichParagraphEditors(e){
+    if(!editMode)return;
+    $$('[data-rich-paragraph]').forEach(el=>{
+      el.onblur=async()=>{
+        const flow=el.closest('[data-rich-flow]');if(!flow)return;
+        const path=flow.dataset.richPath;
+        const parts=[...flow.querySelectorAll('[data-rich-paragraph]')].map(p=>p.innerText.replace(/\u00a0/g,' ').trim()).filter((x,i,a)=>x||a.length===1);
+        setPath(e,path,parts.join('\n\n'));
+        await saveEntityDirect(e);
+      };
+    });
+  }
+
   function refreshCharacterTab(e){
     const active=$('.character-tab.active')?.dataset.characterTab || 'profile';
     $('#characterTabPanel').innerHTML=renderCharacterTab(e,active);
@@ -1238,12 +1333,19 @@
   function wireCharacterTab(e){
     wireEntityLinks();
     wireDirectEditors(e);
+    wireRichParagraphEditors(e);
 
-    $$('[data-add-media]').forEach(btn=>btn.onclick=()=>addMediaAtPath(e,btn.dataset.addMedia));
+    $$('[data-add-media]').forEach(btn=>btn.onclick=()=>addMediaAtPath(e,btn.dataset.addMedia,btn.dataset.mediaTextPath||""));
     $$('[data-media-position]').forEach(btn=>btn.onclick=async()=>{
       const block=btn.closest('[data-media-block]');
       const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
       item.position=btn.dataset.mediaPosition;await saveEntityDirect(e);refreshCharacterTab(e);
+    });
+    $$('[data-media-shift]').forEach(btn=>btn.onclick=async()=>{
+      const block=btn.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
+      const flow=block.closest('[data-rich-flow]');const max=Math.max(0,(flow?.querySelectorAll('[data-rich-paragraph]').length||1)-1);
+      item.anchor=Math.max(0,Math.min(max,(Number(item.anchor)||0)+Number(btn.dataset.mediaShift)));
+      await saveEntityDirect(e);refreshCharacterTab(e);
     });
     $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{
       const block=btn.closest('[data-media-block]');const arr=getPath(e,block.dataset.mediaPath)||[];
@@ -1283,6 +1385,8 @@
         <section id="characterTabPanel" class="character-tab-panel">${renderCharacterTab(e,active)}</section>
       </main></div>${renderTechnical(e)}</div>`;
     $("#pageBack").onclick=()=>showCategory("personajes");
+    $('[data-change-cover="character"]')?.addEventListener('click',()=>choosePortrait(e,()=>showCharacterEntity(e,active)));
+    $('[data-remove-cover="character"]')?.addEventListener('click',async()=>{e.image="";await saveEntityDirect(e);showCharacterEntity(e,active)});
     $$('[data-character-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.characterTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderCharacterTab(e,active);wireCharacterTab(e)});
     $("#copyMasterTag").onclick=()=>copyText(e.masterTag||e.id);$("#copyInternalLink").onclick=()=>copyText(`[[${e.masterTag||e.id}|${e.title}]]`);
     wireDirectEditors(e);wireCharacterTab(e);history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
@@ -1348,6 +1452,7 @@
       <div class="character-portrait-shell">
         <div class="character-portrait place-cover">
           ${image?`<img src="${esc(image)}" alt="">`:`<div class="character-portrait-placeholder">${icon("lugares")}</div>`}
+          ${portraitControls("place")}
         </div>
         <div class="portrait-ornament"></div>
       </div>
@@ -1886,11 +1991,8 @@
     const p=placeData(e);
     return `<div class="character-content-stack">
       <section class="character-section media-aware-block place-description-free">
-        <div class="rich-content-flow">
-          ${renderEmbeddedMedia(p.description.media,"place.description.media",e)}
-          ${renderEditable(e.summary||"","summary",e,{cls:"character-prose editable-long-text",placeholder:"—"})}
-        </div>
-        <button class="inline-add-media" data-place-add-media="place.description.media">＋ Multimedia</button>
+        ${renderRichFlow(e.summary||"","summary",p.description.media,"place.description.media",e)}
+        ${editMode?`<button class="inline-add-media edit-only" data-place-add-media="place.description.media" data-media-text-path="summary">＋ Multimedia</button>`:""}
       </section>
     </div>`;
   }
@@ -1899,7 +2001,7 @@
     const p=placeData(e);
     return `<div class="character-content-stack">
       ${p.history.map((s,i)=>richSection(e,{title:s.title||"",titlePath:`place.history.${i}.title`,path:`place.history.${i}.body`,mediaPath:`place.history.${i}.media`,removeAction:`data-place-remove-history="${i}"`})).join("")}
-      <button class="section-add" data-place-add-history>＋ Apartado</button>
+      ${editMode?`<button class="section-add edit-only" data-place-add-history>＋ Apartado</button>`:""}
     </div>`;
   }
 
@@ -1927,8 +2029,8 @@
 
   function renderPlaceGallery(e){
     const p=placeData(e);
-    return `<section class="character-section gallery-section"><div class="section-title-row"><h2>Galería</h2><button class="section-add compact" data-place-add-gallery>＋ Multimedia</button></div>
-      ${p.gallery.length?`<div class="character-gallery-grid">${p.gallery.map((item,i)=>`<article class="character-gallery-card">${renderMediaElement(item)}${renderEditable(item.caption||"",`place.gallery.${i}.caption`,e,{cls:"gallery-caption direct-gallery-caption",placeholder:"Pie opcional"})}<button class="gallery-remove" data-place-remove-gallery="${i}">×</button></article>`).join("")}</div>`:`<div class="empty">Sin multimedia.</div>`}
+    return `<section class="character-section gallery-section"><div class="section-title-row"><h2>Galería</h2>${editMode?`<button class="section-add compact edit-only" data-place-add-gallery>＋ Multimedia</button>`:""}</div>
+      ${p.gallery.length?`<div class="character-gallery-grid">${p.gallery.map((item,i)=>`<article class="character-gallery-card">${renderMediaElement(item)}${renderEditable(item.caption||"",`place.gallery.${i}.caption`,e,{cls:"gallery-caption direct-gallery-caption",placeholder:"Pie opcional"})}${editMode?`<button class="gallery-remove edit-only" data-place-remove-gallery="${i}">×</button>`:""}</article>`).join("")}</div>`:`<div class="empty">Sin multimedia.</div>`}
     </section>`;
   }
 
@@ -1937,7 +2039,7 @@
     r.kind ||= "Inventado";r.workStatus ||= "Nuevo";
     if(Array.isArray(r.sources))r.sources=r.sources.join("\n");if(Array.isArray(r.pending))r.pending=r.pending.join("\n");if(Array.isArray(r.notes))r.notes=r.notes.join("\n");
     return `<div class="character-content-stack">
-      <section class="character-section research-choices"><div><h2>Lugar</h2><select data-place-select-path="place.research.kind"><option ${r.kind==="Real"?"selected":""}>Real</option><option ${r.kind==="Inventado"?"selected":""}>Inventado</option><option ${r.kind==="Adaptado"?"selected":""}>Adaptado</option></select></div><div><h2>Estado de desarrollo</h2><select data-place-select-path="place.research.workStatus"><option ${r.workStatus==="Nuevo"?"selected":""}>Nuevo</option><option ${r.workStatus==="En desarrollo"?"selected":""}>En desarrollo</option><option ${r.workStatus==="Final"?"selected":""}>Final</option></select></div></section>
+      <section class="character-section research-choices"><div><h2>Lugar</h2>${editMode?`<select data-place-select-path="place.research.kind"><option ${r.kind==="Real"?"selected":""}>Real</option><option ${r.kind==="Inventado"?"selected":""}>Inventado</option><option ${r.kind==="Adaptado"?"selected":""}>Adaptado</option></select>`:`<div class="research-value">${esc(r.kind)}</div>`}</div><div><h2>Estado de desarrollo</h2>${editMode?`<select data-place-select-path="place.research.workStatus"><option ${r.workStatus==="Nuevo"?"selected":""}>Nuevo</option><option ${r.workStatus==="En desarrollo"?"selected":""}>En desarrollo</option><option ${r.workStatus==="Final"?"selected":""}>Final</option></select>`:`<div class="research-value">${esc(r.workStatus)}</div>`}</div></section>
       <section class="character-section"><h2>Fuentes</h2>${renderEditable(r.sources||"","place.research.sources",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
       <section class="character-section"><h2>Pendientes</h2>${renderEditable(r.pending||"","place.research.pending",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
       <section class="character-section"><h2>Notas</h2>${renderEditable(r.notes||"","place.research.notes",e,{cls:"character-prose editable-long-text",placeholder:"—"})}</section>
@@ -2291,11 +2393,11 @@
     const activeTool=placeMapTool?.mapId===m.id;
     const drawing=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
     return `<div class="map-toolbar">
-      <button class="map-tool" data-draw-tool="point" ${!m.image?.src?"disabled":""}>＋ Punto</button>
-      <button class="map-tool" data-draw-tool="line" ${!m.image?.src?"disabled":""}>＋ Línea</button>
-      <button class="map-tool" data-draw-tool="zone" ${!m.image?.src?"disabled":""}>＋ Zona</button>
-      <button class="map-tool" data-draw-tool="route" ${!m.image?.src?"disabled":""}>＋ Ruta manual</button>
-      ${drawing?`<button class="map-tool finish" data-finish-map-tool>Terminar</button>`:""}${activeTool?`<button class="map-tool cancel" data-cancel-map-tool>Cancelar</button>`:""}
+      ${editMode?`<button class="map-tool edit-only" data-draw-tool="point" ${!m.image?.src?"disabled":""}>＋ Punto</button>
+      <button class="map-tool edit-only" data-draw-tool="line" ${!m.image?.src?"disabled":""}>＋ Línea</button>
+      <button class="map-tool edit-only" data-draw-tool="zone" ${!m.image?.src?"disabled":""}>＋ Zona</button>
+      <button class="map-tool edit-only" data-draw-tool="route" ${!m.image?.src?"disabled":""}>＋ Ruta manual</button>
+      ${drawing?`<button class="map-tool finish edit-only" data-finish-map-tool>Terminar</button>`:""}${activeTool?`<button class="map-tool cancel edit-only" data-cancel-map-tool>Cancelar</button>`:""}`:""}
       <span class="map-toolbar-spacer"></span>
       <button class="map-tool" data-map-zoom="out">−</button>
       <button class="map-tool" data-map-zoom="reset">100%</button>
@@ -2306,18 +2408,18 @@
   function renderPlaceMaps(e){
     const p=placeData(e);
     if(!p.maps.length){
-      return `<section class="character-section place-no-maps"><div class="empty">Sin mapas.</div><button class="section-add" data-add-place-map>＋ Mapa</button></section>`;
+      return `<section class="character-section place-no-maps"><div class="empty">Sin mapas.</div>${editMode?`<button class="section-add edit-only" data-add-place-map>＋ Mapa</button>`:""}</section>`;
     }
     const m=activePlaceMap(e);
     return `<div class="place-maps-shell">
-      <div class="place-map-subtabs">${p.maps.map(x=>`<button class="place-map-subtab ${x.id===m.id?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`).join("")}<button class="place-map-subtab add" data-add-place-map>＋</button></div>
-      <div class="place-map-head"><div><strong>${esc(m.title||"Mapa")}</strong><small>${esc(m.image?.name||"Sin imagen base")}</small></div><button class="tiny-map-btn danger" data-remove-place-map="${m.id}">Quitar mapa</button></div>
+      <div class="place-map-subtabs">${p.maps.map(x=>`<button class="place-map-subtab ${x.id===m.id?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`).join("")}${editMode?`<button class="place-map-subtab add edit-only" data-add-place-map>＋</button>`:""}</div>
+      <div class="place-map-head"><div><strong>${esc(m.title||"Mapa")}</strong><small>${esc(m.image?.name||"Sin imagen base")}</small></div>${editMode?`<button class="tiny-map-btn danger edit-only" data-remove-place-map="${m.id}">Quitar mapa</button>`:""}</div>
       ${renderMapToolbar(m)}
       ${renderMapStage(m)}
-      <div class="map-panels-grid">
+      ${editMode?`<div class="map-panels-grid edit-only">
         <div>${renderMapElementList(m)}${renderSelectedElementInspector(e,m)}</div>
         <div>${renderMapLayers(m)}${renderMapLevels(m)}${renderRouteGenerator(m)}${renderMapGlobalSettings(m)}</div>
-      </div>
+      </div>`:""}
     </div>`;
   }
 
@@ -2337,9 +2439,10 @@
     wirePlaceTab(e);
   }
 
-  async function addPlaceMediaAtPath(e,path){
+  async function addPlaceMediaAtPath(e,path,textPath=""){
     const item=await chooseMedia();if(!item)return;
     let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
+    const paragraphs=splitRichParagraphs(textPath?getPath(e,textPath):"");item.anchor=Math.max(0,paragraphs.length-1);
     arr.push(item);await saveEntityDirect(e);refreshPlaceTab(e);
   }
 
@@ -2492,7 +2595,7 @@
     const svg=$('[data-map-stage]');if(!svg)return;
     svg.onclick=async ev=>{
       const p=eventMapPoint(svg,ev,m);
-      const t=placeMapTool;
+      const t=editMode?placeMapTool:null;
       if(t&&t.mapId===m.id){
         if(t.mode==="pick-calibration-A"||t.mode==="pick-calibration-B"){
           const key=t.mode.endsWith("A")?"pointA":"pointB";m.settings.calibration[key]=p;placeMapTool=null;await saveMapAndRefresh(e);return;
@@ -2503,12 +2606,13 @@
         t.nodes.push(p);refreshPlaceTab(e);return;
       }
       const shape=ev.target.closest?.('[data-map-element]');
-      if(shape&&!ev.target.classList.contains('map-node-handle')){
+      if(editMode&&shape&&!ev.target.classList.contains('map-node-handle')){
         selectedPlaceMapElementId=shape.dataset.mapElement;refreshPlaceTab(e);return;
       }
     };
 
     let drag=null;
+    if(!editMode)return;
     svg.querySelectorAll('.map-node-handle').forEach(handle=>{
       handle.onpointerdown=ev=>{ev.preventDefault();ev.stopPropagation();handle.setPointerCapture(ev.pointerId);drag={handle,pointerId:ev.pointerId,part:handle.dataset.nodePart,index:Number(handle.dataset.nodeIndex),partIndex:Number(handle.dataset.partIndex||0)}};
       handle.onpointermove=ev=>{
@@ -2522,9 +2626,9 @@
 
   function wirePlaceMap(e,m){
     $$('[data-place-map-tab]').forEach(btn=>btn.onclick=()=>{activePlaceMapId=btn.dataset.placeMapTab;selectedPlaceMapElementId="";placeMapTool=null;refreshPlaceTab(e)});
-    $('[data-add-place-map]')?.addEventListener('click',async()=>{
-      const title=prompt('Nombre del mapa:','Nuevo mapa');if(title===null)return;const nm=newPlaceMap(title||'Nuevo mapa');placeData(e).maps.push(nm);activePlaceMapId=nm.id;selectedPlaceMapElementId="";await saveMapAndRefresh(e);
-    });
+    $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4,min=Math.min(a,b),max=Math.max(a,b);if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
+    wireMapStage(e,m);
+    if(!editMode)return;
     $$('[data-remove-place-map]').forEach(btn=>btn.onclick=async()=>{const p=placeData(e),idx=p.maps.findIndex(x=>x.id===btn.dataset.removePlaceMap);if(idx<0)return;if(!confirm('¿Quitar este mapa?'))return;p.maps.splice(idx,1);activePlaceMapId=p.maps[0]?.id||"";selectedPlaceMapElementId="";placeMapTool=null;await saveMapAndRefresh(e)});
     $$('[data-map-load-image]').forEach(btn=>btn.onclick=async()=>{const img=await chooseMapImage();if(!img)return;m.image=img;await saveMapAndRefresh(e)});
 
@@ -2580,20 +2684,23 @@
     $$('[data-generator-list]').forEach(c=>c.onchange=async()=>{const arr=m.generator[c.dataset.generatorList];updateListFromChecks(arr,c.checked,c.value);await saveEntityDirect(e)});
     $('[data-generate-route]')?.addEventListener('click',()=>generateRouteProposal(e,m));
 
-    $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4,min=Math.min(a,b),max=Math.max(a,b);if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
-
-    wireMapStage(e,m);
   }
 
   function wirePlaceMedia(e){
-    $$('[data-place-add-media]').forEach(btn=>btn.onclick=()=>addPlaceMediaAtPath(e,btn.dataset.placeAddMedia));
+    $$('[data-place-add-media]').forEach(btn=>btn.onclick=()=>addPlaceMediaAtPath(e,btn.dataset.placeAddMedia,btn.dataset.mediaTextPath||""));
     $$('[data-media-position]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.position=btn.dataset.mediaPosition;await saveEntityDirect(e);refreshPlaceTab(e)});
+    $$('[data-media-shift]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;const flow=block.closest('[data-rich-flow]');const max=Math.max(0,(flow?.querySelectorAll('[data-rich-paragraph]').length||1)-1);item.anchor=Math.max(0,Math.min(max,(Number(item.anchor)||0)+Number(btn.dataset.mediaShift)));await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]'),arr=getPath(e,block.dataset.mediaPath)||[];arr.splice(Number(block.dataset.mediaIndex),1);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('.media-size').forEach(range=>{range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};range.onchange=async()=>{const block=range.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);applyMediaRules()}});
   }
 
   function wirePlaceTab(e){
-    wireEntityLinks();wireDirectEditors(e);wirePlaceMedia(e);
+    wireEntityLinks();wireDirectEditors(e);wireRichParagraphEditors(e);wirePlaceMedia(e);
+    $$('[data-add-media]').forEach(btn=>btn.onclick=()=>addPlaceMediaAtPath(e,btn.dataset.addMedia,btn.dataset.mediaTextPath||""));
+    $('[data-add-place-map]')?.addEventListener('click',async()=>{
+      const title=prompt('Nombre del mapa:','Nuevo mapa');if(title===null)return;
+      const nm=newPlaceMap(title||'Nuevo mapa');placeData(e).maps.push(nm);activePlaceMapId=nm.id;selectedPlaceMapElementId="";await saveMapAndRefresh(e);
+    });
     $('[data-place-add-history]')?.addEventListener('click',async()=>{placeData(e).history.push({title:'Nuevo apartado',body:'',media:[]});await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-remove-history]').forEach(btn=>btn.onclick=async()=>{placeData(e).history.splice(Number(btn.dataset.placeRemoveHistory),1);await saveEntityDirect(e);refreshPlaceTab(e)});
     $('[data-place-add-gallery]')?.addEventListener('click',async()=>{const item=await chooseMedia();if(!item)return;placeData(e).gallery.push(item);await saveEntityDirect(e);refreshPlaceTab(e)});
@@ -2615,6 +2722,8 @@
         <section id="characterTabPanel" class="character-tab-panel">${renderPlaceTab(e,active)}</section>
       </main></div>${renderTechnical(e)}</div>`;
     $("#pageBack").onclick=()=>showCategory("lugares");
+    $('[data-change-cover="place"]')?.addEventListener('click',()=>choosePortrait(e,()=>showPlaceEntity(e,active)));
+    $('[data-remove-cover="place"]')?.addEventListener('click',async()=>{e.image="";await saveEntityDirect(e);showPlaceEntity(e,active)});
     $$('[data-place-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.placeTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderPlaceTab(e,active);wirePlaceTab(e)});
     $("#copyMasterTag").onclick=()=>copyText(e.masterTag||e.id);$("#copyInternalLink").onclick=()=>copyText(`[[${e.masterTag||e.id}|${e.title}]]`);
     wirePlaceTab(e);history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
@@ -2899,6 +3008,7 @@
     console.info("Sethoria Atlas", APP_BUILD);
     buildNav();
     hydrateStaticIcons();
+    syncEditModeUI();
     restoreSidebar();
     window.addEventListener("resize",()=>{
       if(currentView.type==="entity" && document.querySelector(".character-page")) applyMediaRules();
@@ -2908,6 +3018,7 @@
     entities=await ensureSeed();
 
     $("#brandHome").onclick=showHome;
+    $("#editModeBtn").onclick=toggleEditMode;
     $("#sidebarResizeBtn").onclick=e=>{e.stopPropagation();toggleSidebar()};
     $("#registryBtn").onclick=showRegistry;
     $("#linkerBtn").onclick=showLinker;

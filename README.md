@@ -109,3 +109,13 @@ Consulta `PERSONAJES_TANDA0.md`.
 
 ## A6.6.1 — revisión QA de Lugares/Mapas
 Correcciones funcionales: regex de rutas internas y extensiones; cancelación de herramientas; bloqueo de dibujo sin imagen base; validación mínima de geometrías; huecos reales en zonas; intersecciones robustas; limpieza de referencias al borrar elementos/capas/niveles; aplicación del nivel predeterminado; orden visual de capas; transporte predeterminado en rutas; cálculo por tramos con intervalos de velocidad; límites de zoom normalizados.
+
+
+## A6.6.2 — edición/lectura, multimedia y base limpia
+- Modo normal y modo Editar global.
+- Modo normal oculta controles de edición y bloquea edición directa.
+- Retrato/portada editable y reutilizado en tarjetas de categoría.
+- Multimedia anclada después de párrafos, con izquierda/centro/derecha, tamaños mínimos menores y movimiento entre párrafos.
+- Se eliminan demos del paquete y se migran fuera de IndexedDB una sola vez.
+- Categorías arrancan vacías y se prueban sobre datos reales locales.
+- Mapas conservan navegación/zoom en modo normal y muestran edición avanzada solo en modo Editar.
