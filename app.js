@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.6.2-edicion-media-cache";
+  const APP_BUILD = "A6.6.3-media-layout-fix";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function syncEditModeUI(){
@@ -1028,18 +1028,20 @@
 
   function mediaRange(item,position){
     const w=Number(item.width)||1,h=Number(item.height)||1,aspect=w/h;
+    // Límites amplios: el usuario decide el tamaño y el sistema solo evita
+    // extremos claramente inútiles según la forma del archivo.
     if(position==="center"){
-      if(aspect<.65) return [12,42];
-      if(aspect<.85) return [12,50];
-      if(aspect<=1.25) return [14,64];
-      if(aspect<=2.2) return [18,78];
-      return [22,90];
+      if(aspect<.65) return [7,42];
+      if(aspect<.85) return [7,52];
+      if(aspect<=1.25) return [8,66];
+      if(aspect<=2.2) return [9,80];
+      return [10,90];
     }
-    if(aspect>2.6) return null;
-    if(aspect<.65) return [10,30];
-    if(aspect<.85) return [10,35];
-    if(aspect<=1.25) return [12,42];
-    return [14,46];
+    if(aspect>3.2) return null;
+    if(aspect<.65) return [6,30];
+    if(aspect<.85) return [6,36];
+    if(aspect<=1.25) return [7,44];
+    return [8,48];
   }
 
   function renderMediaElement(item){
@@ -1088,14 +1090,25 @@
     });
     let html='<div class="rich-content-flow" data-rich-flow data-rich-path="'+esc(path)+'">';
     paragraphs.forEach((p,pi)=>{
+      const group=buckets.get(pi)||[];
+      const side=group.filter(([item])=>(item.position||"center")!=="center");
+      const centered=group.filter(([item])=>(item.position||"center")==="center");
+
+      // Las imágenes laterales se insertan antes del párrafo asociado para que
+      // el texto las envuelva desde el inicio, en vez de caer siempre debajo.
+      if(side.length){
+        html+=`<div class="media-anchor-group media-anchor-side" data-anchor="${pi}">${side.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div>`;
+      }
+
       if(editMode){
         html+=`<p class="rich-paragraph character-prose" contenteditable="true" spellcheck="true" data-rich-paragraph="${pi}" data-rich-path="${esc(path)}">${esc(p||"")}</p>`;
       }else{
         html+=`<p class="rich-paragraph character-prose">${linkifyText(p||"",e.id)}</p>`;
       }
-      const group=buckets.get(pi)||[];
-      if(group.length){
-        html+=`<div class="media-anchor-group" data-anchor="${pi}">${group.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div>`;
+
+      // El contenido centrado sí rompe el flujo y aparece después del párrafo.
+      if(centered.length){
+        html+=`<div class="media-anchor-group media-anchor-center" data-anchor="${pi}">${centered.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div>`;
       }
     });
     html+='<div class="rich-clear"></div></div>';
@@ -1271,20 +1284,27 @@
     $$('[data-media-block]').forEach(block=>{
       const range=block.querySelector('.media-size');
       const parent=block.closest('.media-aware-block');
-      if(!range||!parent)return;
+      if(!parent)return;
       const idx=Number(block.dataset.mediaIndex),path=block.dataset.mediaPath;
       const e=entities.find(x=>x.id===currentView.id);if(!e)return;
       const item=getPath(e,`${path}.${idx}`);if(!item)return;
       const width=parent.clientWidth||700;
       let effective=item.position||"center";
       let limits=mediaRange(item,effective);
-      if(effective!=="center" && (width<620 || !limits)) effective="center";
-      limits=mediaRange(item,effective)||[12,70];
+
+      // Solo se fuerza el centro cuando el espacio sería realmente insuficiente.
+      if(effective!=="center" && (width<360 || !limits)) effective="center";
+      limits=mediaRange(item,effective)||[7,70];
+      limits=[...limits];
+
       if(effective!=="center"){
-        const minText=Math.max(220,width*.30);
-        const sideMax=Math.max(0,((width-minText-18)/width)*100);
+        const minText=Math.max(170,width*.26);
+        const sideMax=Math.max(0,((width-minText-14)/width)*100);
         limits[1]=Math.min(limits[1],sideMax);
-        if(limits[1]<limits[0]){effective="center";limits=mediaRange(item,"center")||[12,70]}
+        if(limits[1]<limits[0]){
+          effective="center";
+          limits=[...(mediaRange(item,"center")||[7,70])];
+        }
       }
       if(item.width){
         const intrinsicMax=(item.width/width)*100;
@@ -1295,11 +1315,19 @@
         const heightMax=(window.innerHeight*.72*aspect/width)*100;
         limits[1]=Math.min(limits[1],Math.max(limits[0],heightMax));
       }
-      const val=Math.max(limits[0],Math.min(Number(item.size)||34,limits[1]));
-      range.min=Math.floor(limits[0]);range.max=Math.max(Math.ceil(limits[0]),Math.ceil(limits[1]));range.value=Math.round(val);
+
+      const stored=Number(item.size)||34;
+      const val=Math.max(limits[0],Math.min(stored,limits[1]));
       block.style.setProperty("--media-size",`${val}%`);
       block.classList.remove("effective-left","effective-center","effective-right");
       block.classList.add(`effective-${effective}`);
+
+      // El modo normal no tiene deslizador, pero debe usar exactamente las mismas reglas.
+      if(range){
+        range.min=Math.floor(limits[0]);
+        range.max=Math.max(Math.ceil(limits[0]),Math.ceil(limits[1]));
+        range.value=Math.round(val);
+      }
     });
   }
 
@@ -1371,7 +1399,7 @@
 
     $$('[data-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.selectPath,sel.value);await saveEntityDirect(e)});
 
-    requestAnimationFrame(()=>requestAnimationFrame(applyMediaRules));
+    applyMediaRules();
   }
 
   function showCharacterEntity(e,tab="profile"){
@@ -2707,7 +2735,7 @@
     $$('[data-place-remove-gallery]').forEach(btn=>btn.onclick=async()=>{placeData(e).gallery.splice(Number(btn.dataset.placeRemoveGallery),1);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.placeSelectPath,sel.value);await saveEntityDirect(e)});
     const active=$('.character-tab.active')?.dataset.placeTab;if(active==='maps'){const m=activePlaceMap(e);if(m)wirePlaceMap(e,m)}
-    requestAnimationFrame(()=>requestAnimationFrame(applyMediaRules));
+    applyMediaRules();
   }
 
   function showPlaceEntity(e,tab="description"){

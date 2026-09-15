@@ -1124,3 +1124,58 @@ body:not(.edit-mode) .edit-only{display:none!important}
 
 body:not(.edit-mode) .map-node-handle,body:not(.edit-mode) .map-tool-preview{display:none!important}
 body:not(.edit-mode) [contenteditable="true"]{cursor:default}
+
+
+/* A6.6.3 — correcciones de maquetación multimedia y ancho útil */
+
+/* Controles compactos que siguen siendo utilizables incluso con imágenes pequeñas. */
+.media-controls{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:3px;
+  margin-top:5px;
+  opacity:.50;
+}
+.media-controls button{width:auto;min-width:0;height:22px;padding:0}
+.media-controls .media-shift[data-media-shift="-1"]{grid-column:1;grid-row:1}
+.media-controls .media-shift[data-media-shift="1"]{grid-column:2;grid-row:1}
+.media-controls .media-remove{grid-column:3;grid-row:1}
+.media-controls .media-pos[data-media-position="left"]{grid-column:1;grid-row:2}
+.media-controls .media-pos[data-media-position="center"]{grid-column:2;grid-row:2}
+.media-controls .media-pos[data-media-position="right"]{grid-column:3;grid-row:2}
+.media-controls .media-size{
+  grid-column:1 / -1;
+  grid-row:3;
+  width:100%;
+  min-width:0;
+  height:18px;
+  margin:0;
+  padding:0;
+  appearance:none;
+  -webkit-appearance:none;
+  background:transparent;
+  accent-color:transparent;
+}
+.media-controls .media-size::-webkit-slider-runnable-track{
+  height:4px;border-radius:999px;background:rgba(203,174,126,.22);border:1px solid rgba(212,178,122,.15)
+}
+.media-controls .media-size::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:13px;height:13px;margin-top:-5px;border-radius:50%;border:1px solid rgba(243,213,162,.38);background:#b79562;box-shadow:0 1px 5px rgba(0,0,0,.32)
+}
+.media-controls .media-size::-moz-range-track{
+  height:4px;border-radius:999px;background:rgba(203,174,126,.22);border:1px solid rgba(212,178,122,.15)
+}
+.media-controls .media-size::-moz-range-thumb{
+  width:13px;height:13px;border-radius:50%;border:1px solid rgba(243,213,162,.38);background:#b79562
+}
+
+/* Las laterales se colocan junto al párrafo; las centradas sí separan el flujo. */
+.media-anchor-side{display:contents}
+.media-anchor-center{display:block;clear:both}
+.embedded-media.effective-center{clear:both}
+.rich-paragraph{overflow:visible}
+
+/* Al reducir la navegación principal, Personajes y Lugares aprovechan el ancho liberado. */
+#app.sidebar-collapsed #view{max-width:none;width:100%;margin:0;padding-left:18px;padding-right:18px}
+#app.sidebar-collapsed .character-page,
+#app.sidebar-collapsed .place-page{max-width:none;width:100%}
