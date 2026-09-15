@@ -119,3 +119,21 @@ Correcciones funcionales: regex de rutas internas y extensiones; cancelación de
 - Se eliminan demos del paquete y se migran fuera de IndexedDB una sola vez.
 - Categorías arrancan vacías y se prueban sobre datos reales locales.
 - Mapas conservan navegación/zoom en modo normal y muestran edición avanzada solo en modo Editar.
+
+
+## A6.6.4 — multimedia y recuperación
+- Ctrl+Z/Ctrl+Y para cambios ya guardados en la wiki; dentro de un campo de texto se conserva el deshacer nativo del navegador.
+- Multimedia lateral con ajuste de texto tipo cuadrado y movimiento por líneas que atraviesa párrafos.
+- Selección múltiple: varias imágenes añadidas juntas se organizan como fila horizontal centrada.
+- Nueva posición `Fila` para combinar multimedia centrada horizontalmente.
+- El botón Multimedia intenta usar el último párrafo editado del apartado como punto de inserción.
+- Herramienta `Archivos cargados` para localizar y quitar multimedia almacenada en entidades, mapas, galerías o portadas.
+
+
+## A6.6.5 — Multimedia por arrastre asistido
+- Se eliminaron las flechas de posición y desplazamiento.
+- La imagen/GIF/video se mueve directamente arrastrándolo.
+- El programa interpreta izquierda, derecha o bloque centrado según posición, tamaño y espacio disponible.
+- Izquierda/derecha usan ajuste de texto; el bloque centrado ocupa una fila propia y admite una o varias imágenes.
+- La altura de caída dentro de un párrafo se convierte en anclaje y desplazamiento por líneas para conservar control vertical.
+- Se conserva el deslizador de tamaño y el botón de quitar.

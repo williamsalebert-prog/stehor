@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.6.3-media-layout-fix";
+  const APP_BUILD = "A6.6.5-assisted-media-drag";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function syncEditModeUI(){
@@ -19,13 +19,14 @@
     else if(currentView.type==="home") showHome();
     else if(currentView.type==="registry") showRegistry();
     else if(currentView.type==="linker") showLinker();
+    else if(currentView.type==="assets") showAssets();
   }
 
   function toggleEditMode(){
     editMode=!editMode;
     localStorage.setItem("sethoria-edit-mode",editMode?"1":"0");
     syncEditModeUI();
-    rerenderCurrentView();
+    if(!editMode && currentView.type==="assets") showHome(); else rerenderCurrentView();
   }
   const STORE = "entities";
 
@@ -34,6 +35,12 @@
   let currentView = {type:"home"};
   let activeEntityTab = "overview";
   let linkerState = [];
+  let lastRichFocus = null;
+  let undoStack = [];
+  let redoStack = [];
+  let historyBusy = false;
+  let assetManagerRefs = [];
+  const HISTORY_LIMIT = 24;
 
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
@@ -225,6 +232,13 @@
     return new Promise((resolve,reject)=>{
       const r=store().getAll();
       r.onsuccess=()=>resolve(r.result);
+      r.onerror=()=>reject(r.error);
+    });
+  }
+  function getEntityById(id){
+    return new Promise((resolve,reject)=>{
+      const r=store().get(id);
+      r.onsuccess=()=>resolve(r.result||null);
       r.onerror=()=>reject(r.error);
     });
   }
@@ -854,10 +868,73 @@
     });
   }
 
+  function deepCopy(value){
+    if(value==null) return value;
+    try{return structuredClone(value)}catch{return JSON.parse(JSON.stringify(value))}
+  }
+
+  function sameSnapshot(a,b){
+    try{return JSON.stringify(a)===JSON.stringify(b)}catch{return false}
+  }
+
+  function pushHistory(entry){
+    undoStack.push(entry);
+    if(undoStack.length>HISTORY_LIMIT) undoStack.shift();
+    redoStack=[];
+  }
+
   async function saveEntityDirect(e){
-    await putEntity(e);
+    const before=historyBusy?null:await getEntityById(e.id);
+    const after=deepCopy(e);
+    if(!historyBusy && !sameSnapshot(before,after)) pushHistory({id:e.id,before:deepCopy(before),after:deepCopy(after)});
+    await putEntity(after);
     const idx=entities.findIndex(x=>x.id===e.id);
-    if(idx>=0) entities[idx]=e;
+    if(idx>=0) entities[idx]=after; else entities.push(after);
+    return after;
+  }
+
+  async function applyHistorySnapshot(entry,useBefore){
+    if(!entry)return;
+    historyBusy=true;
+    try{
+      const snap=deepCopy(useBefore?entry.before:entry.after);
+      if(snap) await putEntity(snap); else await deleteEntityById(entry.id);
+      entities=await getAll();
+      if(currentView.type==="entity" && !entities.some(x=>x.id===currentView.id)) showCategory("personajes");
+      else rerenderCurrentView();
+    }finally{historyBusy=false}
+  }
+
+  async function appUndo(){
+    const entry=undoStack.pop();if(!entry)return;
+    redoStack.push(entry);
+    await applyHistorySnapshot(entry,true);
+    toast("Deshecho");
+  }
+
+  async function appRedo(){
+    const entry=redoStack.pop();if(!entry)return;
+    undoStack.push(entry);
+    await applyHistorySnapshot(entry,false);
+    toast("Rehecho");
+  }
+
+  function wireUndoKeys(){
+    document.addEventListener("keydown",e=>{
+      if(!editMode || !(e.ctrlKey||e.metaKey))return;
+      const key=e.key.toLowerCase();
+      const active=document.activeElement;
+      const inputType=String(active?.type||"").toLowerCase();
+      const nativeEditor=active?.isContentEditable || active?.tagName==="TEXTAREA" || (active?.tagName==="INPUT" && ["text","number","search","url","email","date","time","datetime-local"].includes(inputType));
+      if(key==="z" && !e.shiftKey){
+        // Mientras se escribe, dejamos al navegador deshacer caracteres normalmente.
+        if(nativeEditor)return;
+        e.preventDefault();appUndo();
+      }else if((key==="z"&&e.shiftKey)||key==="y"){
+        if(nativeEditor)return;
+        e.preventDefault();appRedo();
+      }
+    });
   }
 
   function editableRaw(value,type="text"){
@@ -1006,42 +1083,55 @@
     });
   }
 
-  async function chooseMedia(){
-    const file=await new Promise(resolve=>{
+  async function chooseMediaFiles(multiple=false){
+    const files=await new Promise(resolve=>{
       const input=document.createElement("input");
       input.type="file";
+      input.multiple=multiple;
       input.accept="image/*,video/mp4,video/webm,video/ogg,.gif,.mov,.m4v";
-      input.onchange=()=>resolve(input.files?.[0]||null);
+      input.onchange=()=>resolve([...(input.files||[])]);
       input.click();
     });
-    if(!file) return null;
-    const kind=mediaKind(file);
-    if(!kind){alert("Ese archivo no es una imagen, GIF o video compatible.");return null}
-    const src=await readFileDataURL(file);
-    const dims=await readMediaDimensions(src,kind);
-    return {
-      id:`media-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-      kind,src,name:file.name,width:dims.width,height:dims.height,
-      position:"center",size:kind==="video"?48:34,anchor:0,caption:""
-    };
+    if(!files.length)return [];
+    const out=[];
+    for(const file of files){
+      const kind=mediaKind(file);
+      if(!kind){alert(`No pude cargar ${file.name}: no es una imagen, GIF o video compatible.`);continue}
+      const src=await readFileDataURL(file);
+      const dims=await readMediaDimensions(src,kind);
+      out.push({
+        id:`media-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        kind,src,name:file.name,width:dims.width,height:dims.height,
+        position:"center",size:kind==="video"?48:34,anchor:0,offsetLines:0,caption:""
+      });
+    }
+    return out;
   }
+
+  async function chooseMedia(){
+    return (await chooseMediaFiles(false))[0]||null;
+  }
+
+  async function chooseMediaMany(){
+    return await chooseMediaFiles(true);
+  }
+
 
   function mediaRange(item,position){
     const w=Number(item.width)||1,h=Number(item.height)||1,aspect=w/h;
-    // Límites amplios: el usuario decide el tamaño y el sistema solo evita
-    // extremos claramente inútiles según la forma del archivo.
     if(position==="center"){
-      if(aspect<.65) return [7,42];
-      if(aspect<.85) return [7,52];
-      if(aspect<=1.25) return [8,66];
-      if(aspect<=2.2) return [9,80];
-      return [10,90];
+      if(aspect<.60) return [4,44];
+      if(aspect<.85) return [4,54];
+      if(aspect<=1.25) return [5,68];
+      if(aspect<=2.2) return [6,82];
+      return [7,92];
     }
+    // Panorámicas extremas no funcionan bien como flotantes laterales.
     if(aspect>3.2) return null;
-    if(aspect<.65) return [6,30];
-    if(aspect<.85) return [6,36];
-    if(aspect<=1.25) return [7,44];
-    return [8,48];
+    if(aspect<.60) return [4,30];
+    if(aspect<.85) return [4,36];
+    if(aspect<=1.25) return [5,44];
+    return [6,48];
   }
 
   function renderMediaElement(item){
@@ -1057,19 +1147,17 @@
   }
 
   function renderSingleEmbeddedMedia(item,path,i,e){
-    const pos=item.position||"center";
+    // Compatibilidad con el modo antiguo "row": ahora todo bloque separado es "center".
+    if(item.position==="row") item.position="center";
+    const pos=["left","right","center"].includes(item.position)?item.position:"center";
     const size=Number(item.size)||34;
-    const limits=mediaRange(item,pos)||[12,70];
-    const min=Math.round(limits[0]),max=Math.round(limits[1]);
+    const limits=mediaRange(item,pos)||[6,70];
+    const min=Math.max(4,Math.round(limits[0])),max=Math.max(min,Math.round(limits[1]));
     const ratio=(Number(item.width)>0&&Number(item.height)>0)?`${Number(item.width)}/${Number(item.height)}`:"auto";
-    return `<figure class="embedded-media media-${esc(pos)} effective-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%">
-      <div class="embedded-media-frame" style="aspect-ratio:${ratio}">${renderMediaElement(item)}</div>
+    const offsetLines=Math.max(0,Number(item.offsetLines)||0);
+    return `<figure class="embedded-media media-${esc(pos)} effective-${esc(pos)}" data-media-block data-media-path="${esc(path)}" data-media-index="${i}" data-position="${esc(pos)}" data-width="${Number(item.width)||0}" data-height="${Number(item.height)||0}" style="--media-size:${size}%;--media-offset-lines:${offsetLines}">
+      <div class="embedded-media-frame" style="aspect-ratio:${ratio}">${renderMediaElement(item)}${editMode?`<div class="media-drag-surface" title="Arrastra para colocar la imagen"></div>`:""}</div>
       ${editMode?`<div class="media-controls edit-only">
-        <button class="media-shift" data-media-shift="-1" title="Mover antes">↑</button>
-        <button class="media-shift" data-media-shift="1" title="Mover después">↓</button>
-        <button class="media-pos ${pos==="left"?"active":""}" data-media-position="left" title="Izquierda">←</button>
-        <button class="media-pos ${pos==="center"?"active":""}" data-media-position="center" title="Centro">•</button>
-        <button class="media-pos ${pos==="right"?"active":""}" data-media-position="right" title="Derecha">→</button>
         <input class="media-size" type="range" min="${min}" max="${max}" value="${Math.max(min,Math.min(size,max))}" aria-label="Tamaño">
         <button class="media-remove" data-media-remove title="Quitar">×</button>
       </div>`:""}
@@ -1082,6 +1170,8 @@
     const items=toArray(media);
     const buckets=new Map();
     items.forEach((item,i)=>{
+      if(item.position==="row") item.position="center";
+      if(!["left","right","center"].includes(item.position)) item.position="center";
       let anchor=Number.isFinite(Number(item.anchor))?Number(item.anchor):0;
       anchor=Math.max(0,Math.min(anchor,Math.max(0,paragraphs.length-1)));
       item.anchor=anchor;
@@ -1091,11 +1181,10 @@
     let html='<div class="rich-content-flow" data-rich-flow data-rich-path="'+esc(path)+'">';
     paragraphs.forEach((p,pi)=>{
       const group=buckets.get(pi)||[];
-      const side=group.filter(([item])=>(item.position||"center")!=="center");
-      const centered=group.filter(([item])=>(item.position||"center")==="center");
+      const side=group.filter(([item])=>["left","right"].includes(item.position));
+      const centered=group.filter(([item])=>item.position==="center");
 
-      // Las imágenes laterales se insertan antes del párrafo asociado para que
-      // el texto las envuelva desde el inicio, en vez de caer siempre debajo.
+      // Las laterales nacen dentro del párrafo elegido para que el texto las envuelva.
       if(side.length){
         html+=`<div class="media-anchor-group media-anchor-side" data-anchor="${pi}">${side.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div>`;
       }
@@ -1106,14 +1195,16 @@
         html+=`<p class="rich-paragraph character-prose">${linkifyText(p||"",e.id)}</p>`;
       }
 
-      // El contenido centrado sí rompe el flujo y aparece después del párrafo.
+      // Un bloque centrado es un espacio propio. Una o varias imágenes del mismo
+      // anclaje forman automáticamente una fila horizontal centrada.
       if(centered.length){
-        html+=`<div class="media-anchor-group media-anchor-center" data-anchor="${pi}">${centered.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div>`;
+        html+=`<div class="media-anchor-group media-anchor-center" data-anchor="${pi}"><div class="media-horizontal-row">${centered.map(([item,i])=>renderSingleEmbeddedMedia(item,mediaPath,i,e)).join("")}</div></div>`;
       }
     });
     html+='<div class="rich-clear"></div></div>';
     return html;
   }
+
 
   function richSection(e,{title,path,mediaPath,titlePath="",removeAction="",addMedia=true}){
     const value=getPath(e,path)||"";
@@ -1265,12 +1356,25 @@
     return renderCharacterProfile(e);
   }
 
-  async function addMediaAtPath(e,path,textPath=""){
-    const item=await chooseMedia();if(!item) return;
-    let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
+  function preferredMediaAnchor(e,textPath){
     const paragraphs=splitRichParagraphs(textPath?getPath(e,textPath):"");
-    item.anchor=Math.max(0,paragraphs.length-1);
-    arr.push(item);await saveEntityDirect(e);refreshCharacterTab(e);
+    if(lastRichFocus && lastRichFocus.entityId===e.id && lastRichFocus.path===textPath){
+      return Math.max(0,Math.min(Number(lastRichFocus.index)||0,paragraphs.length-1));
+    }
+    return Math.max(0,paragraphs.length-1);
+  }
+
+  async function addMediaAtPath(e,path,textPath=""){
+    const items=await chooseMediaMany();if(!items.length)return;
+    let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
+    const anchor=preferredMediaAnchor(e,textPath);
+    const asGroup=items.length>1;
+    for(const item of items){
+      item.anchor=anchor;item.offsetLines=0;item.position="center";
+      if(asGroup) item.size=Math.min(30,item.size||30);
+      arr.push(item);
+    }
+    await saveEntityDirect(e);refreshCharacterTab(e);
   }
 
   function rerenderMediaBlock(block,item){
@@ -1288,24 +1392,24 @@
       const idx=Number(block.dataset.mediaIndex),path=block.dataset.mediaPath;
       const e=entities.find(x=>x.id===currentView.id);if(!e)return;
       const item=getPath(e,`${path}.${idx}`);if(!item)return;
+      if(item.position==="row") item.position="center";
       const width=parent.clientWidth||700;
-      let effective=item.position||"center";
-      let limits=mediaRange(item,effective);
-
-      // Solo se fuerza el centro cuando el espacio sería realmente insuficiente.
-      if(effective!=="center" && (width<360 || !limits)) effective="center";
-      limits=mediaRange(item,effective)||[7,70];
+      let effective=["left","right","center"].includes(item.position)?item.position:"center";
+      let limits=mediaRange(item,effective)||mediaRange(item,"center")||[4,70];
       limits=[...limits];
 
-      if(effective!=="center"){
-        const minText=Math.max(170,width*.26);
-        const sideMax=Math.max(0,((width-minText-14)/width)*100);
+      if(["left","right"].includes(effective)){
+        // No dejamos una columna lateral tan estrecha que el texto deje de ser cómodo.
+        // En pantallas estrechas se conserva la intención guardada, pero se muestra centrada.
+        const minText=Math.max(240,width*.34);
+        const sideMax=Math.max(0,((width-minText-16)/width)*100);
         limits[1]=Math.min(limits[1],sideMax);
-        if(limits[1]<limits[0]){
+        if(width<520 || !mediaRange(item,effective) || limits[1]<limits[0]){
           effective="center";
-          limits=[...(mediaRange(item,"center")||[7,70])];
+          limits=[...(mediaRange(item,"center")||[4,70])];
         }
       }
+
       if(item.width){
         const intrinsicMax=(item.width/width)*100;
         limits[1]=Math.min(limits[1],Math.max(limits[0],intrinsicMax));
@@ -1316,15 +1420,22 @@
         limits[1]=Math.min(limits[1],Math.max(limits[0],heightMax));
       }
 
+      // Si varias imágenes están en el mismo bloque centrado deben caber en la fila.
+      if(effective==="center"){
+        const row=block.closest('.media-horizontal-row');
+        const count=Math.max(1,row?.querySelectorAll('[data-media-block]').length||1);
+        if(count>1) limits[1]=Math.min(limits[1],Math.max(limits[0],(96-(count-1)*1.2)/count));
+      }
+
       const stored=Number(item.size)||34;
       const val=Math.max(limits[0],Math.min(stored,limits[1]));
       block.style.setProperty("--media-size",`${val}%`);
-      block.classList.remove("effective-left","effective-center","effective-right");
+      block.classList.remove("effective-left","effective-center","effective-right","effective-row");
       block.classList.add(`effective-${effective}`);
+      block.style.setProperty("--media-offset-lines",String(Math.max(0,Number(item.offsetLines)||0)));
 
-      // El modo normal no tiene deslizador, pero debe usar exactamente las mismas reglas.
       if(range){
-        range.min=Math.floor(limits[0]);
+        range.min=Math.max(4,Math.floor(limits[0]));
         range.max=Math.max(Math.ceil(limits[0]),Math.ceil(limits[1]));
         range.value=Math.round(val);
       }
@@ -1339,9 +1450,120 @@
     const n=Number(answer);return matches[n-1]||null;
   }
 
+  function paragraphLineCount(flow,index){
+    const p=flow?.querySelector(`[data-rich-paragraph="${index}"]`);if(!p)return 1;
+    const cs=getComputedStyle(p),lh=parseFloat(cs.lineHeight)||18;
+    return Math.max(1,Math.round(p.getBoundingClientRect().height/lh));
+  }
+
+  function nearestParagraphForY(flow,clientY){
+    const paragraphs=[...flow.querySelectorAll('.rich-paragraph')];
+    if(!paragraphs.length)return {index:0,el:null};
+    let best={index:0,el:paragraphs[0],distance:Infinity};
+    paragraphs.forEach((el,index)=>{
+      const r=el.getBoundingClientRect();
+      const d=clientY<r.top?r.top-clientY:clientY>r.bottom?clientY-r.bottom:0;
+      if(d<best.distance)best={index,el,distance:d};
+    });
+    return best;
+  }
+
+  function mediaDropIntent(flow,item,centerX,clientY){
+    const fr=flow.getBoundingClientRect();
+    const width=Math.max(1,fr.width);
+    const relativeX=(centerX-fr.left)/width;
+    const sizePct=Math.max(4,Number(item.size)||34);
+    const mediaPx=width*(sizePct/100);
+    const minText=Math.max(240,width*.34);
+    const sideShapeAllowed=!!mediaRange(item,'left');
+    const enoughSideRoom=width>=520 && sideShapeAllowed && (width-mediaPx-16)>=minText;
+
+    let mode='center';
+    if(enoughSideRoom){
+      if(relativeX<=.40) mode='left';
+      else if(relativeX>=.60) mode='right';
+    }
+
+    const nearest=nearestParagraphForY(flow,clientY);
+    let anchor=nearest.index,offsetLines=0;
+    if(mode==='center'){
+      // Un bloque centrado vive entre párrafos. Soltar en la mitad superior
+      // lo deja después del párrafo anterior; en la inferior, después del actual.
+      if(nearest.el){
+        const r=nearest.el.getBoundingClientRect();
+        if(clientY<r.top+r.height*.5 && anchor>0) anchor-=1;
+      }
+    }else if(nearest.el){
+      const r=nearest.el.getBoundingClientRect();
+      const lh=parseFloat(getComputedStyle(nearest.el).lineHeight)||18;
+      offsetLines=Math.max(0,Math.min(paragraphLineCount(flow,anchor)-1,Math.floor((clientY-r.top)/lh)));
+    }
+    return {mode,anchor,offsetLines};
+  }
+
+  function clearMediaDragPreview(block){
+    block.classList.remove('is-dragging','drag-intent-left','drag-intent-right','drag-intent-center');
+    block.style.removeProperty('transform');
+    block.style.removeProperty('--drag-x');
+    block.style.removeProperty('--drag-y');
+  }
+
+  function wireMediaDragging(e,refreshFn){
+    if(!editMode)return;
+    $$('[data-media-block]').forEach(block=>{
+      const surface=block.querySelector('.media-drag-surface');
+      if(!surface)return;
+      surface.onpointerdown=ev=>{
+        if(ev.button!==undefined && ev.button!==0)return;
+        ev.preventDefault();ev.stopPropagation();
+        const flow=block.closest('[data-rich-flow]');if(!flow)return;
+        const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
+        const startRect=block.getBoundingClientRect();
+        const grabX=ev.clientX-startRect.left;
+        const state={pointerId:ev.pointerId,startX:ev.clientX,startY:ev.clientY,startRect,grabX};
+        block.classList.add('is-dragging');
+        try{surface.setPointerCapture(ev.pointerId)}catch{}
+
+        const preview=moveEv=>{
+          if(moveEv.pointerId!==state.pointerId)return;
+          const dx=moveEv.clientX-state.startX,dy=moveEv.clientY-state.startY;
+          block.style.transform=`translate3d(${dx}px,${dy}px,0)`;
+          const centerX=moveEv.clientX+(state.startRect.width*.5-state.grabX);
+          const intent=mediaDropIntent(flow,item,centerX,moveEv.clientY);
+          block.classList.remove('drag-intent-left','drag-intent-right','drag-intent-center');
+          block.classList.add(`drag-intent-${intent.mode}`);
+          state.intent=intent;
+        };
+        const finish=async upEv=>{
+          if(upEv.pointerId!==state.pointerId)return;
+          surface.onpointermove=null;surface.onpointerup=null;surface.onpointercancel=null;
+          try{if(surface.hasPointerCapture(upEv.pointerId))surface.releasePointerCapture(upEv.pointerId)}catch{}
+          const dx=upEv.clientX-state.startX;
+          const centerX=upEv.clientX+(state.startRect.width*.5-state.grabX);
+          const intent=state.intent||mediaDropIntent(flow,item,centerX,upEv.clientY);
+          item.position=intent.mode;
+          item.anchor=intent.anchor;
+          item.offsetLines=intent.offsetLines;
+          clearMediaDragPreview(block);
+          await saveEntityDirect(e);
+          refreshFn(e);
+        };
+        surface.onpointermove=preview;
+        surface.onpointerup=finish;
+        surface.onpointercancel=cancelEv=>{
+          surface.onpointermove=null;surface.onpointerup=null;surface.onpointercancel=null;
+          try{if(surface.hasPointerCapture(cancelEv.pointerId))surface.releasePointerCapture(cancelEv.pointerId)}catch{}
+          clearMediaDragPreview(block);
+        };
+      };
+    });
+  }
+
   function wireRichParagraphEditors(e){
     if(!editMode)return;
     $$('[data-rich-paragraph]').forEach(el=>{
+      const remember=()=>{const flow=el.closest('[data-rich-flow]');if(flow)lastRichFocus={entityId:e.id,path:flow.dataset.richPath,index:Number(el.dataset.richParagraph)||0}};
+      el.onfocus=remember;el.onclick=remember;el.onkeyup=remember;
       el.onblur=async()=>{
         const flow=el.closest('[data-rich-flow]');if(!flow)return;
         const path=flow.dataset.richPath;
@@ -1351,6 +1573,7 @@
       };
     });
   }
+
 
   function refreshCharacterTab(e){
     const active=$('.character-tab.active')?.dataset.characterTab || 'profile';
@@ -1364,17 +1587,6 @@
     wireRichParagraphEditors(e);
 
     $$('[data-add-media]').forEach(btn=>btn.onclick=()=>addMediaAtPath(e,btn.dataset.addMedia,btn.dataset.mediaTextPath||""));
-    $$('[data-media-position]').forEach(btn=>btn.onclick=async()=>{
-      const block=btn.closest('[data-media-block]');
-      const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
-      item.position=btn.dataset.mediaPosition;await saveEntityDirect(e);refreshCharacterTab(e);
-    });
-    $$('[data-media-shift]').forEach(btn=>btn.onclick=async()=>{
-      const block=btn.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;
-      const flow=block.closest('[data-rich-flow]');const max=Math.max(0,(flow?.querySelectorAll('[data-rich-paragraph]').length||1)-1);
-      item.anchor=Math.max(0,Math.min(max,(Number(item.anchor)||0)+Number(btn.dataset.mediaShift)));
-      await saveEntityDirect(e);refreshCharacterTab(e);
-    });
     $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{
       const block=btn.closest('[data-media-block]');const arr=getPath(e,block.dataset.mediaPath)||[];
       arr.splice(Number(block.dataset.mediaIndex),1);await saveEntityDirect(e);refreshCharacterTab(e);
@@ -1383,6 +1595,7 @@
       range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};
       range.onchange=async()=>{const block=range.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);applyMediaRules()};
     });
+    wireMediaDragging(e,refreshCharacterTab);
 
     $('[data-add-history]')?.addEventListener('click',async()=>{normalizeInfo(e).history.push({title:'Nuevo apartado',body:'',media:[]});await saveEntityDirect(e);refreshCharacterTab(e)});
     $$('[data-remove-history]').forEach(btn=>btn.onclick=async()=>{normalizeInfo(e).history.splice(Number(btn.dataset.removeHistory),1);await saveEntityDirect(e);refreshCharacterTab(e)});
@@ -1394,7 +1607,7 @@
     });
     $$('[data-remove-bond]').forEach(btn=>btn.onclick=async()=>{normalizeInfo(e).relationships[btn.dataset.removeBond].splice(Number(btn.dataset.bondIndex),1);await saveEntityDirect(e);refreshCharacterTab(e)});
 
-    $('[data-add-gallery]')?.addEventListener('click',async()=>{const item=await chooseMedia();if(!item)return;normalizeInfo(e).gallery.push(item);await saveEntityDirect(e);refreshCharacterTab(e)});
+    $('[data-add-gallery]')?.addEventListener('click',async()=>{const items=await chooseMediaMany();if(!items.length)return;normalizeInfo(e).gallery.push(...items);await saveEntityDirect(e);refreshCharacterTab(e)});
     $$('[data-remove-gallery]').forEach(btn=>btn.onclick=async()=>{normalizeInfo(e).gallery.splice(Number(btn.dataset.removeGallery),1);await saveEntityDirect(e);refreshCharacterTab(e)});
 
     $$('[data-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.selectPath,sel.value);await saveEntityDirect(e)});
@@ -2468,10 +2681,15 @@
   }
 
   async function addPlaceMediaAtPath(e,path,textPath=""){
-    const item=await chooseMedia();if(!item)return;
+    const items=await chooseMediaMany();if(!items.length)return;
     let arr=getPath(e,path);if(!Array.isArray(arr)){arr=[];setPath(e,path,arr)}
-    const paragraphs=splitRichParagraphs(textPath?getPath(e,textPath):"");item.anchor=Math.max(0,paragraphs.length-1);
-    arr.push(item);await saveEntityDirect(e);refreshPlaceTab(e);
+    const anchor=preferredMediaAnchor(e,textPath),asGroup=items.length>1;
+    for(const item of items){
+      item.anchor=anchor;item.offsetLines=0;item.position="center";
+      if(asGroup) item.size=Math.min(30,item.size||30);
+      arr.push(item);
+    }
+    await saveEntityDirect(e);refreshPlaceTab(e);
   }
 
   function getMapPath(m,path){return getPath(m,path)}
@@ -2705,7 +2923,7 @@
     $$('[data-accept-route]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.acceptRoute);if(!r)return;r.proposal=false;if(r.name==='Ruta propuesta')r.name='Ruta';await saveMapAndRefresh(e)});
     $$('[data-regenerate-route-section]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.regenerateRouteSection);if(!r)return;const wrap=btn.closest('.route-regenerate'),inputs=wrap.querySelectorAll('[data-map-path^="__regen"]');const from=Math.max(0,Number(inputs[0]?.value)||0),to=Math.min(r.nodes.length-1,Number(inputs[1]?.value)||r.nodes.length-1);if(to<=from)return;let repl=densifyPolyline([r.nodes[from],r.nodes[to]],Math.max(2,Number(m.settings.routeDefaults.pointDensity)||2));repl=smoothPolyline(repl,Number(m.settings.routeDefaults.smoothness)||0);r.nodes.splice(from,to-from+1,...repl);r.nodeLevels=r.nodes.map((_,i)=>r.nodeLevels?.[i]||'');await saveMapAndRefresh(e)});
 
-    $$('[data-add-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.addElementMedia);if(!el)return;const item=await chooseMedia();if(!item)return;el.media||=[];el.media.push(item);await saveMapAndRefresh(e)});
+    $$('[data-add-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.addElementMedia);if(!el)return;const items=await chooseMediaMany();if(!items.length)return;el.media||=[];el.media.push(...items);await saveMapAndRefresh(e)});
     $$('[data-remove-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.mediaOwner);if(!el)return;el.media.splice(Number(btn.dataset.removeElementMedia),1);await saveMapAndRefresh(e)});
 
     $$('[data-generator-field]').forEach(input=>input.onchange=async()=>{m.generator[input.dataset.generatorField]=input.value;await saveEntityDirect(e)});
@@ -2716,10 +2934,9 @@
 
   function wirePlaceMedia(e){
     $$('[data-place-add-media]').forEach(btn=>btn.onclick=()=>addPlaceMediaAtPath(e,btn.dataset.placeAddMedia,btn.dataset.mediaTextPath||""));
-    $$('[data-media-position]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.position=btn.dataset.mediaPosition;await saveEntityDirect(e);refreshPlaceTab(e)});
-    $$('[data-media-shift]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;const flow=block.closest('[data-rich-flow]');const max=Math.max(0,(flow?.querySelectorAll('[data-rich-paragraph]').length||1)-1);item.anchor=Math.max(0,Math.min(max,(Number(item.anchor)||0)+Number(btn.dataset.mediaShift)));await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]'),arr=getPath(e,block.dataset.mediaPath)||[];arr.splice(Number(block.dataset.mediaIndex),1);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('.media-size').forEach(range=>{range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};range.onchange=async()=>{const block=range.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);applyMediaRules()}});
+    wireMediaDragging(e,refreshPlaceTab);
   }
 
   function wirePlaceTab(e){
@@ -2731,7 +2948,7 @@
     });
     $('[data-place-add-history]')?.addEventListener('click',async()=>{placeData(e).history.push({title:'Nuevo apartado',body:'',media:[]});await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-remove-history]').forEach(btn=>btn.onclick=async()=>{placeData(e).history.splice(Number(btn.dataset.placeRemoveHistory),1);await saveEntityDirect(e);refreshPlaceTab(e)});
-    $('[data-place-add-gallery]')?.addEventListener('click',async()=>{const item=await chooseMedia();if(!item)return;placeData(e).gallery.push(item);await saveEntityDirect(e);refreshPlaceTab(e)});
+    $('[data-place-add-gallery]')?.addEventListener('click',async()=>{const items=await chooseMediaMany();if(!items.length)return;placeData(e).gallery.push(...items);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-remove-gallery]').forEach(btn=>btn.onclick=async()=>{placeData(e).gallery.splice(Number(btn.dataset.placeRemoveGallery),1);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.placeSelectPath,sel.value);await saveEntityDirect(e)});
     const active=$('.character-tab.active')?.dataset.placeTab;if(active==='maps'){const m=activePlaceMap(e);if(m)wirePlaceMap(e,m)}
@@ -2842,6 +3059,80 @@
   // ---------------------------
   // Herramientas existentes
   // ---------------------------
+
+  function mediaKindFromSrc(src,declared=""){
+    if(declared)return declared;
+    return String(src||"").startsWith("data:video/")?"video":"image";
+  }
+
+  function collectLoadedFiles(){
+    const refs=[];
+    const push=(e,{path,parentPath="",key=null,value=null,name="",kind="",caption="",broken=false})=>{
+      const src=typeof value==="string"?value:(value?.src||"");
+      refs.push({entityId:e.id,entityTitle:e.title||e.id,category:e.category,path,parentPath,key,src,name:name||(value?.name||"Archivo"),kind:mediaKindFromSrc(src,kind||value?.kind||""),caption:caption||value?.caption||"",broken:broken||!src});
+    };
+    const walk=(e,value,path,parent,parentPath,key)=>{
+      if(!value || typeof value!=="object")return;
+      if(Array.isArray(value)){
+        value.forEach((v,i)=>walk(e,v,`${path}.${i}`,value,path,i));return;
+      }
+      const looksMedia=("src" in value)&&(("kind" in value)||("name" in value)||("width" in value)||("height" in value)||/media|gallery|\.image$/i.test(path));
+      const brokenMedia=((String(value.id||"").startsWith("media-")||/media|gallery/i.test(path)) && ("kind" in value) && !("src" in value));
+      if(looksMedia||brokenMedia){
+        push(e,{path,parentPath,key,value,name:value.name||(/\.image$/i.test(path)?"Imagen base del mapa":"Archivo"),broken:brokenMedia||!value.src});
+        return;
+      }
+      for(const [k,v] of Object.entries(value)) walk(e,v,path?`${path}.${k}`:k,value,path,k);
+    };
+    for(const e of entities){
+      const coverKeys=["image","imageUrl","thumbnail","cover"];
+      for(const k of coverKeys){if(typeof e[k]==="string"&&e[k]){push(e,{path:k,parentPath:"",key:k,value:e[k],name:"Imagen principal"});break}}
+      for(const [k,v] of Object.entries(e)){
+        if(coverKeys.includes(k))continue;
+        walk(e,v,k,e,"",k);
+      }
+    }
+    return refs;
+  }
+
+  async function removeManagedFile(ref){
+    const e=entities.find(x=>x.id===ref.entityId);if(!e)return;
+    if(ref.parentPath){
+      const parent=getPath(e,ref.parentPath);
+      if(Array.isArray(parent) && Number.isInteger(Number(ref.key))) parent.splice(Number(ref.key),1);
+      else if(parent && typeof parent==="object") parent[ref.key]=null;
+    }else if(ref.path){
+      setPath(e,ref.path,"");
+    }
+    await saveEntityDirect(e);
+  }
+
+  function showAssets(){
+    if(!editMode){showHome();return}
+    currentView={type:"assets"};setActive("assets");
+    assetManagerRefs=collectLoadedFiles();
+    $("#view").innerHTML=`<div class="tool-page asset-manager-page">
+      <div class="page-head">${backButton()}<h1 class="page-title">Archivos cargados</h1></div>
+      <div class="asset-manager-summary">${assetManagerRefs.length} archivo${assetManagerRefs.length===1?"":"s"} encontrado${assetManagerRefs.length===1?"":"s"}. Aquí puedes localizar multimedia que haya quedado en una sección inesperada y quitarla.</div>
+      ${assetManagerRefs.length?`<div class="asset-manager-grid">${assetManagerRefs.map((r,i)=>`<article class="asset-manager-card ${r.broken?"broken":""}">
+        <div class="asset-manager-preview">${r.broken?`<div class="asset-broken">Archivo sin datos</div>`:(r.kind==="video"?`<video src="${esc(r.src)}" controls preload="metadata"></video>`:`<img src="${esc(r.src)}" alt="">`)}</div>
+        <div class="asset-manager-copy">
+          <strong>${esc(r.name||"Archivo")}</strong>
+          <span>${esc(r.entityTitle)} · ${esc(categoryName(r.category))}</span>
+          <small>${esc(r.path)}</small>
+          ${r.caption?`<p>${esc(r.caption)}</p>`:""}
+        </div>
+        <div class="asset-manager-actions">
+          <button data-asset-open="${i}">Abrir</button>
+          <button class="danger" data-asset-remove="${i}">Quitar</button>
+        </div>
+      </article>`).join("")}</div>`:`<div class="empty">No hay archivos multimedia cargados.</div>`}
+    </div>`;
+    $("#pageBack").onclick=showHome;
+    $$('[data-asset-open]').forEach(btn=>btn.onclick=()=>{const r=assetManagerRefs[Number(btn.dataset.assetOpen)];if(r)showEntity(r.entityId)});
+    $$('[data-asset-remove]').forEach(btn=>btn.onclick=async()=>{const r=assetManagerRefs[Number(btn.dataset.assetRemove)];if(!r)return;if(!confirm(`Quitar ${r.name||"este archivo"} de ${r.entityTitle}?`))return;await removeManagedFile(r);showAssets()});
+  }
+
   function showRegistry(){
     currentView={type:"registry"};
     setActive("registry");
@@ -3038,6 +3329,7 @@
     hydrateStaticIcons();
     syncEditModeUI();
     restoreSidebar();
+    wireUndoKeys();
     window.addEventListener("resize",()=>{
       if(currentView.type==="entity" && document.querySelector(".character-page")) applyMediaRules();
     });
@@ -3050,6 +3342,7 @@
     $("#sidebarResizeBtn").onclick=e=>{e.stopPropagation();toggleSidebar()};
     $("#registryBtn").onclick=showRegistry;
     $("#linkerBtn").onclick=showLinker;
+    $("#assetsBtn").onclick=showAssets;
     $("#exportBtn").onclick=exportBackup;
 
     $("#importInput").onchange=async e=>{
