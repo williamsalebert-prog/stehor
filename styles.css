@@ -1295,3 +1295,34 @@ body:not(.edit-mode) .media-drag-surface{display:none!important}
   /* La separación vertical ya se guarda en píxeles ajustados a la línea real. */
   margin-top:calc(4px + var(--media-offset-px,0px));
 }
+
+
+/* A6.6.7 — tamaño estable: el asistente corrige posición/modo, nunca encoge por falta de texto */
+.embedded-media{transition:none!important}
+
+
+/* A6.6.8 — reconstrucción del flujo multimedia: cero autoencogido y sin cola vacía */
+.embedded-media{transition:none!important;position:relative}
+/* Los controles viven SOBRE la imagen en edición y ya no alteran la altura del float. */
+.embedded-media-frame{position:relative}
+.embedded-media-frame .media-controls{
+  position:absolute!important;left:6px!important;right:6px!important;bottom:6px!important;z-index:7!important;
+  margin:0!important;padding:4px!important;border-radius:7px!important;
+  background:rgba(12,16,21,.78)!important;backdrop-filter:blur(3px);
+  opacity:.28!important;
+}
+.embedded-media:hover .embedded-media-frame .media-controls,
+.embedded-media.is-dragging .embedded-media-frame .media-controls{opacity:.95!important}
+/* El tamaño guardado nunca se reduce por flexbox. Si una fila ya no cabe, salta a la siguiente línea. */
+.media-anchor-center .media-horizontal-row{flex-wrap:wrap!important}
+.media-horizontal-row .embedded-media.effective-center{
+  flex:0 0 var(--media-size,34%)!important;
+  width:var(--media-size,34%)!important;
+  min-width:28px!important;
+}
+/* Un lateral conserva exactamente su porcentaje; la lógica JS decide posición, no tamaño. */
+.embedded-media.effective-left,
+.embedded-media.effective-right{
+  width:var(--media-size,34%)!important;
+  max-width:96%!important;
+}

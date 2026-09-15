@@ -144,3 +144,18 @@ Correcciones funcionales: regex de rutas internas y extensiones; cancelación de
 - Las laterales se ajustan a líneas completas mediante offset en píxeles.
 - El tamaño máximo lateral también considera cuánto texto queda debajo del punto de inserción, reduciendo espacios muertos excesivos.
 - Si ya no cabe una lateral útil dentro de sus límites, se muestra centrada.
+
+
+## A6.6.7 — estabilidad de multimedia
+- El tamaño elegido deja de variar según la cantidad de texto restante.
+- Si una imagen lateral dejaría un hueco muerto, conserva tamaño y se recoloca hacia arriba lo mínimo necesario.
+- Si ni desde el inicio cabe junto al texto, pasa a bloque centrado en vez de encogerse.
+- El mismo comportamiento se aplica al arrastrar y al cambiar el tamaño.
+
+
+## A6.6.8 — reconstrucción del flujo multimedia
+- Se eliminó el autoencogido visual: el porcentaje elegido por el usuario ya no cambia por modo, cantidad de texto o agrupación.
+- Los controles de edición se superponen a la imagen y ya no cambian la altura usada para envolver texto.
+- Las posiciones laterales se validan contra una maqueta invisible de texto limpio; si quedaría cola vacía, la imagen sube línea por línea.
+- Si ninguna línea puede evitar el hueco, la imagen pasa a bloque centrado conservando su tamaño.
+- Se reparan silenciosamente posiciones laterales antiguas al abrir la sección.
