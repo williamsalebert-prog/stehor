@@ -159,3 +159,11 @@ Correcciones funcionales: regex de rutas internas y extensiones; cancelación de
 - Las posiciones laterales se validan contra una maqueta invisible de texto limpio; si quedaría cola vacía, la imagen sube línea por línea.
 - Si ninguna línea puede evitar el hueco, la imagen pasa a bloque centrado conservando su tamaño.
 - Se reparan silenciosamente posiciones laterales antiguas al abrir la sección.
+
+
+## A6.6.9 — corrección lateral determinista
+- Izquierda/derecha ya no se convierten automáticamente a centro en escritorio.
+- El tamaño no provoca recolocación automática al soltar el deslizador.
+- Tras guardar no existe una segunda reparación silenciosa que cambie la posición.
+- Al arrastrar lateralmente, el asistente solo puede subir la imagen para reducir hueco; nunca cambia lado, centro ni tamaño.
+- La zona de detección lateral es más permisiva (44% izquierda / 12% centro / 44% derecha).

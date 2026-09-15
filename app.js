@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.6.8-rebuilt-media-flow";
+  const APP_BUILD = "A6.6.9-stable-side-media";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function syncEditModeUI(){
@@ -1402,14 +1402,9 @@
       const stored=Math.max(2,Math.min(96,Number(item.size)||34));
       let effective=["left","right","center"].includes(item.position)?item.position:"center";
 
-      // El tamaño visible SIEMPRE es el guardado por el usuario. El asistente
-      // puede cambiar de lateral a centro si ya no cabe, pero jamás modifica el tamaño.
-      if(["left","right"].includes(effective)){
-        const sideAllowed=!!mediaRange(item,effective);
-        const mediaPx=width*(stored/100);
-        const minText=Math.max(220,width*.30);
-        if(width<500 || !sideAllowed || (width-mediaPx-16)<minText) effective="center";
-      }
+      // La posición elegida por el usuario es estable. En escritorio, una imagen
+      // guardada como izquierda/derecha NO se convierte silenciosamente a centro.
+      // La adaptación para pantallas estrechas queda exclusivamente en CSS.
 
       block.style.setProperty("--media-size",`${stored}%`);
       block.classList.remove("effective-left","effective-center","effective-right","effective-row");
@@ -1528,18 +1523,19 @@
       },0);
     }
 
-    // Ataca el hueco desde la causa: prueba la posición pedida y, si la imagen
-    // terminaría por debajo del último texto, la sube línea por línea hasta la
-    // primera posición que deja texto hasta el final de la imagen.
+    // Regla determinista: conserva SIEMPRE izquierda/derecha y el tamaño.
+    // Solo puede subir la imagen para reducir hueco muerto; nunca la centra,
+    // nunca la encoge y nunca vuelve a recolocarla después de guardarla.
+    let best={...intent};
+    let bestGap=Infinity;
     for(let i=wanted;i>=0;i--){
       const c=candidates[i];
       const test={...intent,anchor:c.anchor,offsetLines:c.offsetLines,offsetPx:c.offsetPx};
-      if(sideCandidateHasEnoughText(flow,item,test,mediaHeight).ok) return test;
+      const result=sideCandidateHasEnoughText(flow,item,test,mediaHeight);
+      if(result.gap<bestGap){bestGap=result.gap;best=test}
+      if(result.ok) return test;
     }
-
-    // Si ni siquiera desde la primera línea existe texto suficiente, una lateral
-    // produciría hueco inevitable: pasa a bloque centrado sin tocar el tamaño.
-    return {...intent,mode:'center',anchor:Math.max(0,Number(intent.anchor)||0),offsetLines:0,offsetPx:0};
+    return best;
   }
 
   function mediaDropIntent(flow,item,centerX,dropTopY,mediaHeight=0){
@@ -1547,15 +1543,15 @@
     const width=Math.max(1,fr.width);
     const relativeX=(centerX-fr.left)/width;
     const sizePct=Math.max(4,Number(item.size)||34);
-    const mediaPx=width*(sizePct/100);
-    const minText=Math.max(240,width*.34);
     const sideShapeAllowed=!!mediaRange(item,'left');
-    const enoughSideRoom=width>=520 && sideShapeAllowed && (width-mediaPx-16)>=minText;
 
+    // La intención horizontal depende de dónde la suelta el usuario, no de una
+    // comprobación posterior que pueda anular su elección. Dejamos una franja
+    // central estrecha para el bloque independiente.
     let mode='center';
-    if(enoughSideRoom){
-      if(relativeX<=.40) mode='left';
-      else if(relativeX>=.60) mode='right';
+    if(width>=420 && sideShapeAllowed){
+      if(relativeX<=.44) mode='left';
+      else if(relativeX>=.56) mode='right';
     }
 
     // Para una lateral usamos el BORDE SUPERIOR real de la imagen, no la
@@ -1704,7 +1700,7 @@
     });
     $$('.media-size').forEach(range=>{
       range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};
-      range.onchange=async()=>{const block=range.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);const flow=block.closest('[data-rich-flow]');if(flow&&['left','right'].includes(item.position)){const intent=fitSidePlacementToText(flow,item,{mode:item.position,anchor:Number(item.anchor)||0,offsetLines:Number(item.offsetLines)||0,offsetPx:Number(item.offsetPx)||0},block.getBoundingClientRect().height);item.position=intent.mode;item.anchor=intent.anchor;item.offsetLines=intent.offsetLines;item.offsetPx=intent.offsetPx||0;}await saveEntityDirect(e);refreshCharacterTab(e)};
+      range.onchange=async()=>{const block=range.closest('[data-media-block]');const item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);refreshCharacterTab(e)};
     });
     wireMediaDragging(e,refreshCharacterTab);
 
@@ -1724,7 +1720,7 @@
     $$('[data-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.selectPath,sel.value);await saveEntityDirect(e)});
 
     applyMediaRules();
-    requestAnimationFrame(()=>repairRenderedSideMedia(e,refreshCharacterTab));
+    // A6.6.9: no reparación automática posterior; la colocación solo cambia por acción del usuario.
   }
 
   function showCharacterEntity(e,tab="profile"){
@@ -3047,7 +3043,7 @@
   function wirePlaceMedia(e){
     $$('[data-place-add-media]').forEach(btn=>btn.onclick=()=>addPlaceMediaAtPath(e,btn.dataset.placeAddMedia,btn.dataset.mediaTextPath||""));
     $$('[data-media-remove]').forEach(btn=>btn.onclick=async()=>{const block=btn.closest('[data-media-block]'),arr=getPath(e,block.dataset.mediaPath)||[];arr.splice(Number(block.dataset.mediaIndex),1);await saveEntityDirect(e);refreshPlaceTab(e)});
-    $$('.media-size').forEach(range=>{range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};range.onchange=async()=>{const block=range.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);const flow=block.closest('[data-rich-flow]');if(flow&&['left','right'].includes(item.position)){const intent=fitSidePlacementToText(flow,item,{mode:item.position,anchor:Number(item.anchor)||0,offsetLines:Number(item.offsetLines)||0,offsetPx:Number(item.offsetPx)||0},block.getBoundingClientRect().height);item.position=intent.mode;item.anchor=intent.anchor;item.offsetLines=intent.offsetLines;item.offsetPx=intent.offsetPx||0;}await saveEntityDirect(e);refreshPlaceTab(e)}});
+    $$('.media-size').forEach(range=>{range.oninput=()=>{const block=range.closest('[data-media-block]');block.style.setProperty('--media-size',`${range.value}%`)};range.onchange=async()=>{const block=range.closest('[data-media-block]'),item=getPath(e,`${block.dataset.mediaPath}.${block.dataset.mediaIndex}`);if(!item)return;item.size=Number(range.value);await saveEntityDirect(e);refreshPlaceTab(e)}});
     wireMediaDragging(e,refreshPlaceTab);
   }
 
@@ -3065,7 +3061,7 @@
     $$('[data-place-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.placeSelectPath,sel.value);await saveEntityDirect(e)});
     const active=$('.character-tab.active')?.dataset.placeTab;if(active==='maps'){const m=activePlaceMap(e);if(m)wirePlaceMap(e,m)}
     applyMediaRules();
-    requestAnimationFrame(()=>repairRenderedSideMedia(e,refreshPlaceTab));
+    // A6.6.9: no reparación automática posterior; la colocación solo cambia por acción del usuario.
   }
 
   function showPlaceEntity(e,tab="description"){

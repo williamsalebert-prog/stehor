@@ -1326,3 +1326,10 @@ body:not(.edit-mode) .media-drag-surface{display:none!important}
   width:var(--media-size,34%)!important;
   max-width:96%!important;
 }
+
+
+/* A6.6.9 — laterales estables: ninguna regla de escritorio los recentra automáticamente */
+@media(min-width:761px){
+  .embedded-media.media-left.effective-left{float:left!important}
+  .embedded-media.media-right.effective-right{float:right!important}
+}
