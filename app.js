@@ -1,12 +1,24 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.7.2-fixed-sidebar-editable-names";
+  const APP_BUILD = "A6.7.3-map-controls";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
+
+  function editModeToggleMarkup(){
+    return `<button class="inline-edit-mode-toggle" type="button" data-edit-mode-toggle aria-pressed="${editMode?"true":"false"}">${editMode?"Listo":"Editar"}</button>`;
+  }
 
   function syncEditModeUI(){
     document.body.classList.toggle("edit-mode",editMode);
-    const btn=document.getElementById("editModeBtn");
-    if(btn){btn.textContent=editMode?"Listo":"Editar";btn.setAttribute("aria-pressed",editMode?"true":"false");btn.title=editMode?"Volver a modo normal":"Editar esta wiki"}
+    $$('[data-edit-mode-toggle]').forEach(btn=>{
+      btn.textContent=editMode?"Listo":"Editar";
+      btn.setAttribute("aria-pressed",editMode?"true":"false");
+      btn.title=editMode?"Volver a modo normal":"Editar esta wiki";
+    });
+  }
+
+  function wireEditModeToggles(){
+    $$('[data-edit-mode-toggle]').forEach(btn=>btn.onclick=toggleEditMode);
+    syncEditModeUI();
   }
 
   function rerenderCurrentView(){
@@ -374,12 +386,15 @@
       <div class="page-head">
         ${backButton()}
         <h1 class="page-title">${esc(categoryName(id))}</h1>
+        <span class="page-head-spacer"></span>
+        ${editModeToggleMarkup()}
         ${editMode?`<button class="category-add edit-only" data-add-entity>＋ Agregar</button>`:""}
       </div>
       ${list.length ? `<div class="cards-grid">${list.map(e=>`<div class="item-card-wrap">${itemCard(e)}${editMode?`<button class="entity-remove edit-only" data-remove-entity="${e.id}" title="Quitar">×</button>`:""}</div>`).join("")}</div>` : `<div class="empty">Sin elementos todavía.</div>`}
     `;
 
     $("#pageBack").onclick=showHome;
+    wireEditModeToggles();
     $$("[data-item]").forEach(btn=>btn.onclick=()=>showEntity(btn.dataset.item));
     $('[data-add-entity]')?.addEventListener('click',async()=>{
       const title=prompt('Nombre:');if(!title||!title.trim())return;
@@ -2013,12 +2028,13 @@
     const validTabs=CHARACTER_TABS.map(x=>x[0]);let active=validTabs.includes(tab)?tab:"profile";
     $("#view").innerHTML=`<div class="character-page">
       <div class="page-head">${backButton()}<h1 class="page-title">Personajes</h1></div>
-      <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
+      <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div>${editModeToggleMarkup()}</header>
       <div class="character-wiki-layout">${renderCharacterInfobox(e)}<main class="character-article">
         <nav class="character-tabs" aria-label="Secciones del personaje">${CHARACTER_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-character-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
         <section id="characterTabPanel" class="character-tab-panel">${renderCharacterTab(e,active)}</section>
       </main></div>${renderTechnical(e)}</div>`;
     $("#pageBack").onclick=()=>showCategory("personajes");
+    wireEditModeToggles();
     $('[data-change-cover="character"]')?.addEventListener('click',()=>choosePortrait(e,()=>showCharacterEntity(e,active)));
     $('[data-remove-cover="character"]')?.addEventListener('click',async()=>{e.image="";await saveEntityDirect(e);showCharacterEntity(e,active)});
     $$('[data-character-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.characterTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderCharacterTab(e,active);wireCharacterTab(e)});
@@ -2105,6 +2121,8 @@
   function defaultMapSettings(){
     return {
       rotation:0,
+      mirrorX:false,
+      baseScale:1,
       northAngle:0,
       baseOpacity:1,
       coordinates:{
@@ -2557,9 +2575,12 @@
     return handles+toArray(el.parts).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle part-handle" cx="${p.x}" cy="${p.y}" r=".6" data-node-index="${i}" data-node-part="parts" data-part-index="${pi}"/>`).join("")).join("")+toArray(el.holes).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle hole-handle" cx="${p.x}" cy="${p.y}" r=".6" data-node-index="${i}" data-node-part="holes" data-part-index="${pi}"/>`).join("")).join("");
   }
 
+
   function currentMapView(m){
-    if(!placeMapViews.has(m.id))placeMapViews.set(m.id,{zoom:1,panX:0,panY:0});
-    return placeMapViews.get(m.id);
+    if(!placeMapViews.has(m.id)) placeMapViews.set(m.id,{zoom:1,panX:0,panY:0,displayMode:"normal",justPanned:false});
+    const v=placeMapViews.get(m.id);
+    if(!v.displayMode) v.displayMode="normal";
+    return v;
   }
 
   function renderMapElementsSvg(m){
@@ -2578,20 +2599,27 @@
     return others.map(el=>renderMapElementSvg(m,el)).join("")+clusters;
   }
 
+
   function renderMapStage(m){
     const img=m.image;
     if(!img?.src){
       return `<div class="place-map-empty"><div>${icon("lugares")}</div><p>Sin imagen base.</p><button class="map-action" data-map-load-image>＋ Cargar imagen base</button></div>`;
     }
+
     const ratio=(Number(img.width)>0&&Number(img.height)>0)?`${img.width}/${img.height}`:"16/9";
-    const rot=Number(m.settings.rotation)||0;
+    const rot=((Number(m.settings.rotation)||0)%360+360)%360;
+    const baseScale=Math.max(.5,Math.min(2,Number(m.settings.baseScale)||1));
+    const mirrorX=m.settings.mirrorX?-1:1;
     const els=renderMapElementsSvg(m);
     const view=currentMapView(m);
-    return `<div class="place-map-viewport" data-map-viewport>
-      <div class="place-map-canvas" style="aspect-ratio:${ratio};transform:translate(${view.panX}px,${view.panY}px) scale(${view.zoom})">
+    const mapTransform=`translate(50 50) rotate(${rot}) scale(${mirrorX*baseScale} ${baseScale}) translate(-50 -50)`;
+    const tabClass=view.displayMode==="tab"?" map-tab-mode":"";
+
+    return `<div class="place-map-viewport${tabClass}" data-map-viewport>
+      <div class="place-map-canvas" data-map-canvas style="aspect-ratio:${ratio};transform:translate(${view.panX}px,${view.panY}px) scale(${view.zoom})">
         <svg class="place-map-svg" data-map-stage viewBox="0 0 100 100" preserveAspectRatio="none">
           <defs><marker id="mapArrow" markerWidth="4" markerHeight="4" refX="3.2" refY="2" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/></marker></defs>
-          <g transform="rotate(${rot} 50 50)">
+          <g class="map-content-transform" transform="${mapTransform}">
             <image href="${esc(img.src)}" x="0" y="0" width="100" height="100" preserveAspectRatio="none" opacity="${Number(m.settings.baseOpacity)??1}"/>
             <g class="map-elements-layer">${els}</g>
             ${placeMapTool?.mapId===m.id&&toArray(placeMapTool.nodes).length?renderToolPreview(m):""}
@@ -2599,6 +2627,7 @@
           <g class="map-north" transform="translate(93 8) rotate(${Number(m.settings.northAngle)||0})"><path d="M0 4 L0 -4"/><path d="M0 -4 L-1.2 -1.5 L1.2 -1.5 Z"/><text x="0" y="-5">N</text></g>
         </svg>
       </div>
+      ${renderMapBottomControls(m)}
     </div>`;
   }
 
@@ -2609,15 +2638,22 @@
     return "";
   }
 
-  function inverseRotatedPoint(x,y,deg){
-    const a=-deg*Math.PI/180,cx=50,cy=50,dx=x-cx,dy=y-cy;
-    return {x:cx+dx*Math.cos(a)-dy*Math.sin(a),y:cy+dx*Math.sin(a)+dy*Math.cos(a)};
+
+  function inverseRotatedPoint(x,y,deg,m=null){
+    const cx=50,cy=50;
+    let dx=x-cx,dy=y-cy;
+    const a=-(Number(deg)||0)*Math.PI/180;
+    const rx=dx*Math.cos(a)-dy*Math.sin(a);
+    const ry=dx*Math.sin(a)+dy*Math.cos(a);
+    const scale=Math.max(.5,Math.min(2,Number(m?.settings?.baseScale)||1));
+    const mirror=m?.settings?.mirrorX?-1:1;
+    return {x:cx+(rx/(mirror*scale)),y:cy+(ry/scale)};
   }
 
   function eventMapPoint(svg,ev,m){
     const r=svg.getBoundingClientRect();
     let x=(ev.clientX-r.left)/r.width*100,y=(ev.clientY-r.top)/r.height*100;
-    const p=inverseRotatedPoint(x,y,Number(m.settings.rotation)||0);
+    const p=inverseRotatedPoint(x,y,Number(m.settings.rotation)||0,m);
     return {x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y))};
   }
 
@@ -2726,9 +2762,11 @@
         <h4>Base</h4>
         <div class="map-settings-grid">
           ${settingRow("Nombre",mapInput("title",m.title))}
-          ${settingRow("Archivo base",`<div class="inline-map-fields"><span class="map-file-name">${esc(m.image?.name||"—")}</span><button class="tiny-map-btn" data-map-load-image>Cambiar</button></div>`,true)}
+          ${settingRow("Imagen base",`<div class="inline-map-fields"><button class="tiny-map-btn" data-map-load-image>Cambiar</button><button class="tiny-map-btn danger" data-map-remove-image>Quitar</button></div>`,true)}
           ${settingRow("Dimensiones",`<span class="read-value">${m.image?.width||0} × ${m.image?.height||0} px</span>`)}
-          ${settingRow("Rotación",mapInput("settings.rotation",s.rotation,{type:"number",min:-360,max:360,step:1}))}
+          ${settingRow("Rotación",mapInput("settings.rotation",s.rotation,{type:"number",min:-360,max:360,step:90}))}
+          ${settingRow("Espejo",mapCheckbox("settings.mirrorX",s.mirrorX,"Horizontal"))}
+          ${settingRow("Tamaño base",mapInput("settings.baseScale",s.baseScale,{type:"range",min:.5,max:2,step:.05}))}
           ${settingRow("Norte",mapInput("settings.northAngle",s.northAngle,{type:"number",min:-360,max:360,step:1}))}
           ${settingRow("Opacidad base",mapInput("settings.baseOpacity",s.baseOpacity,{type:"range",min:0.1,max:1,step:0.05}))}
         </div>
@@ -3023,19 +3061,43 @@
     </div></details>`;
   }
 
+
   function renderMapToolbar(m){
+    return "";
+  }
+
+  function renderMapBottomControls(m){
     const activeTool=placeMapTool?.mapId===m.id;
     const drawing=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
-    return `<div class="map-toolbar">
-      ${editMode?`<button class="map-tool edit-only" data-draw-tool="point" ${!m.image?.src?"disabled":""}>＋ Punto</button>
-      <button class="map-tool edit-only" data-draw-tool="line" ${!m.image?.src?"disabled":""}>＋ Línea</button>
-      <button class="map-tool edit-only" data-draw-tool="zone" ${!m.image?.src?"disabled":""}>＋ Zona</button>
-      <button class="map-tool edit-only" data-draw-tool="route" ${!m.image?.src?"disabled":""}>＋ Ruta manual</button>
-      ${drawing?`<button class="map-tool finish edit-only" data-finish-map-tool>Terminar</button>`:""}${activeTool?`<button class="map-tool cancel edit-only" data-cancel-map-tool>Cancelar</button>`:""}`:""}
-      <span class="map-toolbar-spacer"></span>
-      <button class="map-tool" data-map-zoom="out">−</button>
-      <button class="map-tool" data-map-zoom="reset">100%</button>
-      <button class="map-tool" data-map-zoom="in">＋</button>
+    const baseScale=Math.round((Number(m.settings.baseScale)||1)*100);
+
+    return `<div class="map-bottom-controls" data-map-bottom-controls>
+      <div class="map-bottom-left">
+        ${editMode?`
+          <button class="map-compact-btn" data-draw-tool="point">＋ Punto</button>
+          <button class="map-compact-btn" data-draw-tool="line">＋ Línea</button>
+          <button class="map-compact-btn" data-draw-tool="zone">＋ Zona</button>
+          <button class="map-compact-btn" data-draw-tool="route">＋ Ruta</button>
+          ${drawing?`<button class="map-compact-btn finish" data-finish-map-tool>Terminar</button>`:""}
+          ${activeTool?`<button class="map-compact-btn cancel" data-cancel-map-tool>Cancelar</button>`:""}
+          <details class="map-image-menu">
+            <summary>Imagen</summary>
+            <div class="map-image-menu-body">
+              <button class="map-compact-btn" data-map-rotate-90>↻ 90°</button>
+              <button class="map-compact-btn ${m.settings.mirrorX?"active":""}" data-map-mirror>Espejo</button>
+              <label class="map-base-scale-label"><span>Tamaño</span><input type="range" min="50" max="200" step="5" value="${baseScale}" data-map-base-scale></label>
+              <button class="map-compact-btn" data-map-load-image>Cambiar</button>
+              <button class="map-compact-btn danger" data-map-remove-image>Quitar</button>
+            </div>
+          </details>
+        `:""}
+      </div>
+      <div class="map-bottom-right">
+        <button class="map-compact-btn" data-map-zoom="reset">100%</button>
+        <button class="map-compact-btn" data-map-view="tab">Pestaña</button>
+        <button class="map-compact-btn" data-map-view="fullscreen">Pantalla</button>
+        <button class="map-compact-btn" data-map-view="normal">Normal</button>
+      </div>
     </div>`;
   }
 
@@ -3049,8 +3111,7 @@
       <div class="place-map-subtabs">${p.maps.map(x=>`<button class="place-map-subtab ${x.id===m.id?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`).join("")}${editMode?`<button class="place-map-subtab add edit-only" data-add-place-map>＋</button>`:""}</div>
       <div class="place-map-head"><div>${editMode
         ? `<strong class="map-title-direct" contenteditable="true" spellcheck="false" data-map-title-edit>${esc(m.title||"Mapa")}</strong>`
-        : `<strong>${esc(m.title||"Mapa")}</strong>`}<small>${esc(m.image?.name||"Sin imagen base")}</small></div>${editMode?`<button class="tiny-map-btn danger edit-only" data-remove-place-map="${m.id}">Quitar mapa</button>`:""}</div>
-      ${renderMapToolbar(m)}
+        : `<strong>${esc(m.title||"Mapa")}</strong>`}</div>${editMode?`<button class="tiny-map-btn danger edit-only" data-remove-place-map="${m.id}">Quitar mapa</button>`:""}</div>
       ${renderMapStage(m)}
       ${editMode?`<div class="map-panels-grid edit-only">
         <div>${renderMapElementList(m)}${renderSelectedElementInspector(e,m)}</div>
@@ -3232,9 +3293,103 @@
     });
   }
 
+
+  function applyMapCanvasView(m){
+    const canvas=$('[data-map-canvas]');if(!canvas)return;
+    const v=currentMapView(m);
+    canvas.style.transform=`translate(${v.panX}px,${v.panY}px) scale(${v.zoom})`;
+  }
+
+  function setMapDisplayMode(m,mode){
+    const viewport=$('[data-map-viewport]');if(!viewport)return;
+    const v=currentMapView(m);
+
+    if(mode==="normal"){
+      v.displayMode="normal";
+      viewport.classList.remove("map-tab-mode");
+      if(document.fullscreenElement) document.exitFullscreen?.();
+      return;
+    }
+
+    if(mode==="tab"){
+      if(document.fullscreenElement) document.exitFullscreen?.();
+      v.displayMode="tab";
+      viewport.classList.add("map-tab-mode");
+      return;
+    }
+
+    if(mode==="fullscreen"){
+      v.displayMode="normal";
+      viewport.classList.remove("map-tab-mode");
+      viewport.requestFullscreen?.();
+    }
+  }
+
+  function wireMapViewportNavigation(m){
+    const viewport=$('[data-map-viewport]');
+    const canvas=viewport?.querySelector('[data-map-canvas]');
+    if(!viewport||!canvas)return;
+
+    viewport.onwheel=ev=>{
+      if(!m.image?.src)return;
+      ev.preventDefault();
+      const v=currentMapView(m);
+      const a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4;
+      const min=Math.min(a,b),max=Math.max(a,b);
+      const old=v.zoom;
+      const factor=ev.deltaY<0?1.12:(1/1.12);
+      const next=Math.max(min,Math.min(max,old*factor));
+      if(Math.abs(next-old)<1e-6)return;
+
+      const vr=viewport.getBoundingClientRect();
+      const localX=ev.clientX-vr.left-canvas.offsetLeft;
+      const localY=ev.clientY-vr.top-canvas.offsetTop;
+      v.panX=localX-(localX-v.panX)*(next/old);
+      v.panY=localY-(localY-v.panY)*(next/old);
+      v.zoom=next;
+      applyMapCanvasView(m);
+    };
+
+    let pan=null;
+    viewport.onpointerdown=ev=>{
+      if(ev.button!==0)return;
+      if(ev.target.closest('[data-map-bottom-controls],.map-node-handle'))return;
+      if(editMode&&placeMapTool?.mapId===m.id)return;
+      const v=currentMapView(m);
+      pan={id:ev.pointerId,startX:ev.clientX,startY:ev.clientY,panX:v.panX,panY:v.panY,moved:false};
+      try{viewport.setPointerCapture(ev.pointerId)}catch{}
+    };
+    viewport.onpointermove=ev=>{
+      if(!pan||pan.id!==ev.pointerId)return;
+      const dx=ev.clientX-pan.startX,dy=ev.clientY-pan.startY;
+      if(!pan.moved&&Math.hypot(dx,dy)<4)return;
+      pan.moved=true;
+      ev.preventDefault();
+      const v=currentMapView(m);
+      v.panX=pan.panX+dx;
+      v.panY=pan.panY+dy;
+      viewport.classList.add('is-panning');
+      applyMapCanvasView(m);
+    };
+    const finish=ev=>{
+      if(!pan||pan.id!==ev.pointerId)return;
+      const v=currentMapView(m);
+      if(pan.moved)v.justPanned=true;
+      pan=null;
+      viewport.classList.remove('is-panning');
+      try{viewport.releasePointerCapture(ev.pointerId)}catch{}
+    };
+    viewport.onpointerup=finish;
+    viewport.onpointercancel=finish;
+
+    $$('[data-map-view]').forEach(btn=>btn.onclick=()=>setMapDisplayMode(m,btn.dataset.mapView));
+  }
+
   function wireMapStage(e,m){
     const svg=$('[data-map-stage]');if(!svg)return;
     svg.onclick=async ev=>{
+      const view=currentMapView(m);
+      if(view.justPanned){view.justPanned=false;return}
       const p=eventMapPoint(svg,ev,m);
       const t=editMode?placeMapTool:null;
       if(t&&t.mapId===m.id){
@@ -3267,9 +3422,33 @@
 
   function wirePlaceMap(e,m){
     $$('[data-place-map-tab]').forEach(btn=>btn.onclick=()=>{activePlaceMapId=btn.dataset.placeMapTab;selectedPlaceMapElementId="";placeMapTool=null;refreshPlaceTab(e)});
-    $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4,min=Math.min(a,b),max=Math.max(a,b);if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
+    $$('[data-map-zoom="reset"]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m);v.zoom=1;v.panX=0;v.panY=0;applyMapCanvasView(m)});
+    wireMapViewportNavigation(m);
     wireMapStage(e,m);
     if(!editMode)return;
+
+    $('[data-map-rotate-90]')?.addEventListener('click',async()=>{
+      m.settings.rotation=((Number(m.settings.rotation)||0)+90)%360;
+      await saveMapAndRefresh(e);
+    });
+    $('[data-map-mirror]')?.addEventListener('click',async()=>{
+      m.settings.mirrorX=!m.settings.mirrorX;
+      await saveMapAndRefresh(e);
+    });
+    $('[data-map-base-scale]')?.addEventListener('input',ev=>{
+      const value=Math.max(50,Math.min(200,Number(ev.currentTarget.value)||100))/100;
+      m.settings.baseScale=value;
+      const group=$('.map-content-transform');
+      if(group){
+        const rot=((Number(m.settings.rotation)||0)%360+360)%360;
+        const mirror=m.settings.mirrorX?-1:1;
+        group.setAttribute('transform',`translate(50 50) rotate(${rot}) scale(${mirror*value} ${value}) translate(-50 -50)`);
+      }
+    });
+    $('[data-map-base-scale]')?.addEventListener('change',async ev=>{
+      m.settings.baseScale=Math.max(50,Math.min(200,Number(ev.currentTarget.value)||100))/100;
+      await saveEntityDirect(e);
+    });
     $('[data-map-title-edit]')?.addEventListener('blur',async ev=>{
       const value=ev.currentTarget.innerText.replace(/\u00a0/g,' ').trim();
       m.title=value||'Mapa';
@@ -3280,6 +3459,12 @@
     });
     $$('[data-remove-place-map]').forEach(btn=>btn.onclick=async()=>{const p=placeData(e),idx=p.maps.findIndex(x=>x.id===btn.dataset.removePlaceMap);if(idx<0)return;if(!confirm('¿Quitar este mapa?'))return;p.maps.splice(idx,1);activePlaceMapId=p.maps[0]?.id||"";selectedPlaceMapElementId="";placeMapTool=null;await saveMapAndRefresh(e)});
     $$('[data-map-load-image]').forEach(btn=>btn.onclick=async()=>{const img=await chooseMapImage();if(!img)return;m.image=img;await saveMapAndRefresh(e)});
+    $$('[data-map-remove-image]').forEach(btn=>btn.onclick=async()=>{
+      if(!m.image?.src)return;
+      if(!confirm('¿Quitar la imagen base de este mapa?'))return;
+      m.image=null;
+      await saveMapAndRefresh(e);
+    });
 
     $$('[data-map-path]').forEach(input=>{
       const handler=async()=>{
@@ -3369,12 +3554,13 @@
     if(active==='maps'){const m=activePlaceMap(e);if(m)activePlaceMapId=m.id}
     $("#view").innerHTML=`<div class="character-page place-page">
       <div class="page-head">${backButton()}<h1 class="page-title">Lugares</h1></div>
-      <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
+      <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div>${editModeToggleMarkup()}</header>
       <div class="character-wiki-layout">${renderPlaceInfobox(e)}<main class="character-article">
         <nav class="character-tabs" aria-label="Secciones del lugar">${PLACE_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-place-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
         <section id="characterTabPanel" class="character-tab-panel">${renderPlaceTab(e,active)}</section>
       </main></div>${renderTechnical(e)}</div>`;
     $("#pageBack").onclick=()=>showCategory("lugares");
+    wireEditModeToggles();
     $('[data-change-cover="place"]')?.addEventListener('click',()=>choosePortrait(e,()=>showPlaceEntity(e,active)));
     $('[data-remove-cover="place"]')?.addEventListener('click',async()=>{e.image="";await saveEntityDirect(e);showPlaceEntity(e,active)});
     $$('[data-place-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.placeTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderPlaceTab(e,active);wirePlaceTab(e)});
@@ -3412,6 +3598,8 @@
         <div class="page-head">
           ${backButton()}
           <h1 class="page-title">${esc(categoryName(e.category))}</h1>
+          <span class="page-head-spacer"></span>
+          ${editModeToggleMarkup()}
         </div>
 
         <section class="entity-identity">
@@ -3449,6 +3637,7 @@
     `;
 
     $("#pageBack").onclick=()=>showCategory(e.category);
+    wireEditModeToggles();
     $$("[data-entity-tab]").forEach(btn=>{
       btn.onclick=()=>{
         activeEntityTab=btn.dataset.entityTab;
@@ -3746,7 +3935,6 @@
     entities=await ensureSeed();
 
     $("#brandHome").onclick=showHome;
-    $("#editModeBtn").onclick=toggleEditMode;
     $("#registryBtn").onclick=showRegistry;
     $("#linkerBtn").onclick=showLinker;
     $("#assetsBtn").onclick=showAssets;
