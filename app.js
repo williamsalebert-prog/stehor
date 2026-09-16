@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.7.7-stable-map-view-modes";
+  const APP_BUILD = "A6.8.0-point-icons-sliders-scroll";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function editModeToggleMarkup(){
@@ -2075,6 +2075,7 @@
     p.history ||= [];
     p.gallery ||= [];
     p.research ||= {};
+    p.parentPlaceId ||= "";
     return p;
   }
 
@@ -2084,7 +2085,6 @@
       {title:"Información",rows:[
         ["También conocido como","place.info.aliases",true],
         ["Tipo","place.info.type",false],
-        ["Lugar superior","place.info.parent",false],
         ["Ubicación","place.info.location",false],
         ["Época / procedencia","place.info.originPeriod",false],
         ["Estado","place.info.state",false]
@@ -2098,6 +2098,51 @@
     ];
   }
 
+
+  function placeParentEntity(e){
+    const id=placeData(e).parentPlaceId;
+    return id?entities.find(x=>x.id===id&&x.category==="lugares")||null:null;
+  }
+
+  function placeChildren(e){
+    return entities.filter(x=>x.id!==e.id&&x.category==="lugares"&&placeData(x).parentPlaceId===e.id);
+  }
+
+  function renderPlaceHierarchyRows(e){
+    const p=placeData(e);
+    const parent=placeParentEntity(e);
+    const children=placeChildren(e);
+    const options=entities
+      .filter(x=>x.category==="lugares"&&x.id!==e.id)
+      .sort((a,b)=>String(a.title||"").localeCompare(String(b.title||""),"es"))
+      .map(x=>`<option value="${x.id}" ${p.parentPlaceId===x.id?"selected":""}>${esc(x.title||"Lugar")}</option>`)
+      .join("");
+
+    const parentRow=editMode
+      ? `<div class="infobox-row place-hierarchy-row">
+          <dt>Lugar contenedor</dt>
+          <dd>
+            <label class="place-parent-toggle"><input type="checkbox" data-place-parent-enabled ${p.parentPlaceId?"checked":""}> Vincular</label>
+            <select class="infobox-entity-select" data-place-parent-select ${p.parentPlaceId?"":"disabled"}>
+              <option value="">— Seleccionar lugar —</option>${options}
+            </select>
+          </dd>
+        </div>`
+      : `<div class="infobox-row place-hierarchy-row">
+          <dt>Lugar contenedor</dt>
+          <dd>${parent?`<button class="infobox-link-button" data-open-related="${parent.id}">${esc(parent.title)}</button>`:"—"}</dd>
+        </div>`;
+
+    const childrenRow=children.length
+      ? `<div class="infobox-row place-hierarchy-row">
+          <dt>Contiene</dt>
+          <dd class="place-children-links">${children.map(x=>`<button class="infobox-link-button" data-open-related="${x.id}">${esc(x.title)}</button>`).join("")}</dd>
+        </div>`
+      : "";
+
+    return parentRow+childrenRow;
+  }
+
   function renderPlaceInfobox(e){
     const image=getImage(e);
     return `<aside class="character-infobox place-infobox">
@@ -2108,9 +2153,10 @@
         </div>
         <div class="portrait-ornament"></div>
       </div>
-      ${placeInfoRows(e).map(group=>`<section class="infobox-section">
+      ${placeInfoRows(e).map((group,gi)=>`<section class="infobox-section">
         <h3>${esc(group.title)}</h3><dl>
           ${group.rows.map(([label,path,lines])=>`<div class="infobox-row"><dt>${esc(label)}</dt><dd>${renderEditable(getPath(e,path),path,e,{lines,cls:"infobox-direct-edit"})}</dd></div>`).join("")}
+          ${gi===0?renderPlaceHierarchyRows(e):""}
         </dl>
       </section>`).join("")}
     </aside>`;
@@ -2220,6 +2266,10 @@
       }else if(el.kind==="route"){
         el.routeMode ||= "route";
       }
+      if(el.kind==="point"){
+        el.symbol ||= "";
+        el.iconImage ||= "";
+      }
       if(el.kind==="route"){
         el.nodes ||= [];
         el.routeMode ||= "route";
@@ -2232,6 +2282,13 @@
         el.waypointPointIds ||= [];
         el.segments ||= [];
         el.media ||= [];
+      }
+      // Información del elemento: bloques simples para el panel izquierdo.
+      // Los campos antiguos se conservan y solo se presentan mediante esta capa.
+      if(!Array.isArray(el.infoBlocks)){
+        el.infoBlocks=[];
+        if(String(el.note||"").trim())el.infoBlocks.push({type:"paragraph",text:String(el.note)});
+        for(const item of toArray(el.media))el.infoBlocks.push({type:"media",item});
       }
     }
     return m;
@@ -2279,11 +2336,13 @@
       dateFrom:"",
       dateTo:"",
       visible:true,
+      label:false,
       order:0,
       style:{color:"",opacity:"",lineWidth:"",dash:""},
-      media:[]
+      media:[],
+      infoBlocks:[]
     };
-    if(kind==="point") return {...common,x:nodes[0]?.x??50,y:nodes[0]?.y??50,lat:"",lon:"",altitude:"",symbol:"",size:"",rotation:0,label:true,labelPosition:"top",labelOffsetX:0,labelOffsetY:0,radius:"",direction:""};
+    if(kind==="point") return {...common,x:nodes[0]?.x??50,y:nodes[0]?.y??50,lat:"",lon:"",altitude:"",symbol:"",iconImage:"",size:"",rotation:0,labelPosition:"top",labelOffsetX:0,labelOffsetY:0,radius:"",direction:""};
     if(kind==="zone") return {...common,nodes,holes:[],parts:[],fillOpacity:"",borderWidth:"",labelPoint:null,elevation:"",height:"",containerId:""};
     return {...common,routeMode:"route",nodes,nodeLevels:nodes.map(()=>""),strokeType:"solid",arrows:false,smoothing:0,originPointId:"",destinationPointId:"",waypointPointIds:[],circular:false,direction:"forward",transport:"",segments:[],speedMode:"fixed",fixedSpeed:"",speedMin:"",speedMax:"",speedApprox:false,durationManual:"",departure:"",arrival:"",uncertainty:"",manualDistance:"",proposal:false,generation:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}};
   }
@@ -2507,13 +2566,14 @@
 
   function mapElementStyle(m,el){
     const layer=layerStyleFor(m,el),own=el.style||{};
-    return {color:own.color||layer.color||"#d4b27a",opacity:1,width:Number(own.lineWidth)||2,dash:own.dash||"",symbol:""};
+    const opacity=own.opacity!==""&&own.opacity!=null&&Number.isFinite(Number(own.opacity))?Math.max(0,Math.min(1,Number(own.opacity))):1;
+    return {color:own.color||layer.color||"#d4b27a",opacity,width:Number(own.lineWidth)||2,dash:own.dash||"",symbol:""};
   }
 
   function svgPoints(nodes){return toArray(nodes).map(p=>`${Number(p.x)||0},${Number(p.y)||0}`).join(" ")}
 
   function renderMapLabels(m,el,selected){
-    if(el.kind==="point"&&el.label===false)return "";
+    if(el.label===false)return "";
     if(currentMapView(m).zoom<.45)return "";
     const name=el.name||"";if(!name)return "";
     let x=50,y=50;
@@ -2546,11 +2606,15 @@
     if(el.kind==="point"){
       const size=Number(el.size)||12;
       const r=Math.max(.45,Math.min(3.2,size*.075));
-      shape=`<g ${common} class="map-shape point-shape ${selected?"selected":""}"><circle cx="${Number(el.x)||0}" cy="${Number(el.y)||0}" r="${r}" fill="${esc(s.color)}" stroke="rgba(0,0,0,.55)" stroke-width=".3"/><text class="map-point-symbol" x="${Number(el.x)||0}" y="${(Number(el.y)||0)+.15}">${esc(el.symbol||s.symbol||"•")}</text></g>`;
+      const x=Number(el.x)||0,y=Number(el.y)||0;
+      const icon=el.iconImage
+        ? `<image class="map-point-image" href="${esc(el.iconImage)}" x="${x-r*.68}" y="${y-r*.68}" width="${r*1.36}" height="${r*1.36}" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>`
+        : `<text class="map-point-symbol" style="font-size:${Math.max(.9,Math.min(2.8,r*1.2))}px" x="${x}" y="${y+.15}">${esc(el.symbol||s.symbol||"•")}</text>`;
+      shape=`<g ${common} class="map-shape point-shape ${selected?"selected":""}"><circle cx="${x}" cy="${y}" r="${r}" fill="${esc(s.color)}" stroke="rgba(0,0,0,.55)" stroke-width=".3"/>${icon}</g>`;
     }else if(el.kind==="zone"){
       const rings=[toArray(el.nodes),...toArray(el.parts),...toArray(el.holes)].filter(r=>r.length>2);
       const pathD=rings.map(r=>`M ${r.map(p=>`${Number(p.x)||0} ${Number(p.y)||0}`).join(" L ")} Z`).join(" ");
-      if(pathD)shape=`<path ${common} class="map-shape zone-shape ${selected?"selected":""}" d="${pathD}" fill="${esc(s.color)}" fill-rule="evenodd" clip-rule="evenodd" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):0.22}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`;
+      if(pathD)shape=`<path ${common} class="map-shape zone-shape ${selected?"selected":""}" d="${pathD}" fill="${esc(s.color)}" fill-rule="evenodd" clip-rule="evenodd" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):0.14}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`;
     }else if(el.kind==="route"){
       const lineMode=(el.routeMode||"route")==="line";
       let nodes=lineMode?toArray(el.nodes):routeNodesForCalc(el);
@@ -2563,21 +2627,28 @@
         }else{
           markers=el.direction==="backward"?' marker-start="url(#mapArrow)"':el.direction==="both"?' marker-start="url(#mapArrow)" marker-end="url(#mapArrow)"':' marker-end="url(#mapArrow)"';
         }
-        shape=`<polyline ${common} class="map-shape ${lineMode?"line-shape":"route-shape"} ${selected?"selected":""} ${!lineMode&&el.proposal?"proposal":""}" points="${svgPoints(nodes)}" fill="none" stroke="${esc(s.color)}" stroke-width="${Math.max(.2,s.width*.19)}" ${!lineMode&&el.proposal?'stroke-dasharray="1.2 1"':dashAttr}${markers}/>`;
+        const visualWidth=Math.max(.18,s.width*.19);
+        const hitWidth=Math.max(2.4,visualWidth*5.5);
+        const pts=svgPoints(nodes);
+        shape=`<polyline data-map-element="${esc(el.id)}" class="map-route-hit" points="${pts}" fill="none" stroke="transparent" stroke-width="${hitWidth}" pointer-events="stroke"/><polyline ${common} class="map-shape ${lineMode?"line-shape":"route-shape"} ${selected?"selected":""} ${!lineMode&&el.proposal?"proposal":""}" points="${pts}" fill="none" stroke="${esc(s.color)}" stroke-opacity=".88" stroke-width="${visualWidth}" ${!lineMode&&el.proposal?'stroke-dasharray="1.2 1"':dashAttr}${markers}/>`;
       }
     }
-    const handles=editMode&&selected?renderMapHandles(el):"";
+    const handles=editMode&&selected?renderMapHandles(el,s.color):"";
     return `${shape}${renderMapLabels(m,el,selected)}${handles}`;
   }
 
-  function renderMapHandles(el){
-    if(el.kind==="point") return `<circle class="map-node-handle" cx="${Number(el.x)||0}" cy="${Number(el.y)||0}" r=".75" data-node-index="0" data-node-part="point"/>`;
-    const handles=toArray(el.nodes).map((p,i)=>`<circle class="map-node-handle" cx="${Number(p.x)||0}" cy="${Number(p.y)||0}" r=".68" data-node-index="${i}" data-node-part="nodes"/>`).join("");
+
+
+  function renderMapHandles(el,color="#d4b27a"){
+    if(el.kind==="point")return "";
+    const c=esc(color||"#d4b27a");
+    const style=`style="fill:${c};stroke:rgba(18,16,18,.72);stroke-width:.16px"`;
+    const handles=toArray(el.nodes).map((p,i)=>`<circle class="map-node-handle" ${style} cx="${Number(p.x)||0}" cy="${Number(p.y)||0}" r=".38" data-node-index="${i}" data-node-part="nodes"/>`).join("");
     if(el.kind!=="zone")return handles;
-    return handles+toArray(el.parts).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle part-handle" cx="${p.x}" cy="${p.y}" r=".6" data-node-index="${i}" data-node-part="parts" data-part-index="${pi}"/>`).join("")).join("")+toArray(el.holes).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle hole-handle" cx="${p.x}" cy="${p.y}" r=".6" data-node-index="${i}" data-node-part="holes" data-part-index="${pi}"/>`).join("")).join("");
+    return handles
+      +toArray(el.parts).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle part-handle" ${style} cx="${p.x}" cy="${p.y}" r=".32" data-node-index="${i}" data-node-part="parts" data-part-index="${pi}"/>`).join("")).join("")
+      +toArray(el.holes).map((part,pi)=>toArray(part).map((p,i)=>`<circle class="map-node-handle hole-handle" ${style} cx="${p.x}" cy="${p.y}" r=".32" data-node-index="${i}" data-node-part="holes" data-part-index="${pi}"/>`).join("")).join("");
   }
-
-
 
   function currentMapView(m){
     if(!placeMapViews.has(m.id)) placeMapViews.set(m.id,{
@@ -2602,25 +2673,73 @@
     return m.elements.slice().sort((a,b)=>layerOrder(a)-layerOrder(b)).map(el=>renderMapElementSvg(m,el)).join("");
   }
 
+
+  function elementInfoBlocks(el){
+    return Array.isArray(el?.infoBlocks)?el.infoBlocks:[];
+  }
+
+  function renderElementInfoRead(el,e){
+    const blocks=elementInfoBlocks(el);
+    if(!blocks.length)return "";
+    return `<div class="map-info-rich">${blocks.map(block=>{
+      if(block.type==="title")return block.text?`<h3>${esc(block.text)}</h3>`:"";
+      if(block.type==="subtitle")return block.text?`<h4>${esc(block.text)}</h4>`:"";
+      if(block.type==="media"){
+        const item=block.item||{};
+        return item.src?`<figure>${renderMediaElement(item)}${item.caption?`<figcaption>${esc(item.caption)}</figcaption>`:""}</figure>`:"";
+      }
+      return block.text?`<p>${linkifyText(block.text,e.id)}</p>`:"";
+    }).join("")}</div>`;
+  }
+
+  function renderElementInfoEditor(m,el){
+    const blocks=elementInfoBlocks(el);
+    return `<div class="element-info-editor">
+      <div class="map-mini-head"><strong>Texto / explicación</strong></div>
+      <div class="element-info-add-row">
+        <button class="tiny-map-btn" data-add-info-block="paragraph" data-info-owner="${el.id}">＋ Texto</button>
+        <button class="tiny-map-btn" data-add-info-block="title" data-info-owner="${el.id}">＋ Título</button>
+        <button class="tiny-map-btn" data-add-info-block="subtitle" data-info-owner="${el.id}">＋ Subtítulo</button>
+        <button class="tiny-map-btn" data-add-info-media="${el.id}">＋ Multimedia</button>
+      </div>
+      ${blocks.length?`<div class="element-info-blocks">${blocks.map((block,bi)=>{
+        if(block.type==="media"){
+          const item=block.item||{};
+          return `<div class="element-info-block media-block">
+            <button class="element-info-remove" data-remove-info-block="${bi}" data-info-owner="${el.id}" title="Quitar">×</button>
+            ${item.src?renderMediaElement(item):`<div class="empty small">Archivo no disponible</div>`}
+            <input class="map-field element-info-caption" data-info-caption="${bi}" data-info-owner="${el.id}" value="${esc(item.caption||"")}" placeholder="Pie opcional">
+          </div>`;
+        }
+        const cls=block.type==="title"?"title-block":block.type==="subtitle"?"subtitle-block":"paragraph-block";
+        const tag=block.type==="paragraph"?"textarea":"input";
+        const placeholder=block.type==="title"?"Título":block.type==="subtitle"?"Subtítulo":"Texto";
+        return `<div class="element-info-block ${cls}">
+          <button class="element-info-remove" data-remove-info-block="${bi}" data-info-owner="${el.id}" title="Quitar">×</button>
+          ${tag==="textarea"?`<textarea class="map-textarea" data-info-block-text="${bi}" data-info-owner="${el.id}" placeholder="${placeholder}">${esc(block.text||"")}</textarea>`:`<input class="map-field" data-info-block-text="${bi}" data-info-owner="${el.id}" value="${esc(block.text||"")}" placeholder="${placeholder}">`}
+        </div>`;
+      }).join("")}</div>`:`<div class="empty small">Sin explicación todavía.</div>`}
+    </div>`;
+  }
+
+
   function mapElementHasInfo(m,el){
     if(!el)return false;
-    const hasText=String(el.note||"").trim().length>0;
-    const hasMedia=toArray(el.media).length>0;
-    const hasLink=!!el.targetId;
-    const hasCategory=!!String(el.category||"").trim()&&!(el.kind==="route"&&el.category==="rutas");
+    const hasBlocks=elementInfoBlocks(el).some(b=>b.type==="media"?!!b.item?.src:!!String(b.text||"").trim());
     const meaningfulName=!!String(el.name||"").trim()&&!/^Nuev[oa] (punto|zona|ruta|línea)$/i.test(String(el.name||""));
+    const hasArticle=!!mapLinkedEntity(el);
     if(el.kind==="route"&&(el.routeMode||"route")==="route"){
       const travel=!!(el.transport||el.fixedSpeed||el.durationManual||el.departure||el.arrival||el.originPointId||el.destinationPointId);
-      return hasText||hasMedia||hasLink||hasCategory||meaningfulName||travel;
+      return hasBlocks||meaningfulName||travel||hasArticle;
     }
-    return hasText||hasMedia||hasLink||hasCategory||meaningfulName;
+    return hasBlocks||meaningfulName||hasArticle;
   }
+
 
   function renderMapInfoPanel(e,m){
     if(editMode)return "";
     const el=placeMapElement(m,activeMapInfoElementId);
     if(!el||!mapElementHasInfo(m,el))return "";
-    const target=entities.find(x=>x.id===el.targetId);
     const type=el.kind==="point"?"Punto":el.kind==="zone"?"Zona":((el.routeMode||"route")==="line"?"Línea":"Ruta");
     let derived="";
     if(el.kind==="zone")derived=`<div class="map-info-facts"><span>Área <strong>${formatArea(zoneAreaMeters2(m,el),m)}</strong></span><span>Perímetro <strong>${formatDistance(zonePerimeterMeters(m,el),m)}</strong></span></div>`;
@@ -2632,15 +2751,12 @@
     return `<aside class="map-side-panel map-info-panel" data-map-info-panel>
       <div class="map-side-panel-head"><div><small>${esc(type)}</small><strong>${esc(el.name||type)}</strong></div><button class="map-panel-close" data-close-map-info>×</button></div>
       <div class="map-side-panel-scroll">
-        ${el.category&&!(el.kind==="route"&&el.category==="rutas")?`<div class="map-info-category">${esc(categoryName(el.category)||el.category)}</div>`:""}
-        ${target?`<button class="map-info-link" data-open-related="${target.id}">${esc(target.title)}</button>`:""}
-        ${el.note?`<div class="map-info-text">${linkifyText(el.note,e.id)}</div>`:""}
+        ${renderElementInfoRead(el,e)}
         ${derived}
-        ${toArray(el.media).length?`<div class="map-info-media">${el.media.map(item=>`<figure>${renderMediaElement(item)}${item.caption?`<figcaption>${esc(item.caption)}</figcaption>`:""}</figure>`).join("")}</div>`:""}
+        ${mapLinkedEntity(el)?`<button class="map-open-article" data-open-map-article="${mapLinkedEntity(el).id}">Abrir artículo →</button>`:""}
       </div>
     </aside>`;
   }
-
 
   function renderMapEditSidebar(e,m){
     if(!editMode)return "";
@@ -2871,12 +2987,12 @@
     </section>`;
   }
 
+
   function renderMapElementList(m){
-    const labelFor=el=>el.kind==="point"?"Punto":el.kind==="zone"?"Zona":(el.routeMode||"route")==="line"?"Ruta · Línea":"Ruta";
+    const labelFor=el=>el.kind==="point"?"Punto":el.kind==="zone"?"Zona":(el.routeMode||"route")==="line"?"Línea":"Ruta";
     const activeTool=placeMapTool?.mapId===m.id;
     const needsFinish=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
     const canDraw=!!m.image?.src&&!activeTool;
-    const view=currentMapView(m);
 
     return `<section class="map-panel-pane" data-map-pane="elements">
       <div class="map-pane-head"><strong>Elementos</strong></div>
@@ -2885,13 +3001,7 @@
           <button class="tiny-map-btn" data-draw-tool="point" ${canDraw?"":"disabled"}>＋ Punto</button>
           <button class="tiny-map-btn" data-draw-tool="zone" ${canDraw?"":"disabled"}>＋ Zona</button>
           <button class="tiny-map-btn" data-draw-tool="route" ${canDraw?"":"disabled"}>＋ Ruta</button>
-          <label class="route-line-check" title="Crear la ruta como línea sin funciones de viaje">
-            <input type="checkbox" data-new-route-line ${view.newRouteAsLine?"checked":""}> Línea
-          </label>
-          <button class="tiny-map-btn" data-toggle-route-generator ${view.newRouteAsLine||activeTool?"disabled":""}>Generar</button>
         </div>
-
-        ${view.routeGeneratorOpen&&!view.newRouteAsLine ? renderRouteGenerator(m) : ""}
 
         ${activeTool?`<div class="map-active-tool">
           <span>Herramienta activa</span>
@@ -2901,41 +3011,137 @@
 
         ${m.elements.length?`<div class="map-element-list">${m.elements.map(el=>`<div class="map-element-list-row ${el.id===selectedPlaceMapElementId?"active":""}">
           <button class="map-element-open" data-select-map-element="${el.id}"><span>${esc(labelFor(el))}</span><strong>${esc(el.name||"Sin nombre")}</strong></button>
-          <label class="mini-check"><input type="checkbox" data-element-visible="${el.id}" ${el.visible!==false?"checked":""}>◉</label>
+          <label class="mini-check" title="Visible"><input type="checkbox" data-element-visible="${el.id}" ${el.visible!==false?"checked":""}></label>
           <button class="tiny-map-btn danger" data-delete-map-element="${el.id}">×</button>
         </div>`).join("")}</div>`:`<div class="empty small">Sin elementos.</div>`}
       </div>
     </section>`;
   }
 
+
+  const POINT_ICON_PRESETS=[
+    "•","●","○","◆","◇","★","✦","✚","⚑","⚔️","🛡️","⚓","⌂","♜","♞","♟️",
+    "📍","🚩","🧭","🏠","🏰","⛺","🌲","🌋","🏔️","🌊","🔥","💀","👤","👥","🐾","❗",
+    "❓","✨","☀️","🌙","🚶","🐎","🚢","⛵","🚗","✈️","🗡️","🏹","🔔","📜","🪙","💎"
+  ];
+
+  function mapRange(path,value,{min=0,max=100,step=1,suffix=""}={}){
+    const v=value===""||value==null?min:value;
+    return `<div class="map-range-control"><input class="map-field map-range" type="range" data-map-path="${esc(path)}" value="${esc(v)}" min="${min}" max="${max}" step="${step}"><output data-map-range-output>${esc(v)}${esc(suffix)}</output></div>`;
+  }
+
+  function renderPointIconSelector(m,el){
+    const i=m.elements.indexOf(el);
+    const current=el.iconImage?`<img src="${esc(el.iconImage)}" alt="">`:`<span>${esc(el.symbol||"•")}</span>`;
+    return `<details class="point-icon-picker">
+      <summary><span>Icono</span><span class="point-icon-current">${current}</span></summary>
+      <div class="point-icon-picker-body">
+        <div class="point-icon-grid">${POINT_ICON_PRESETS.map(icon=>`<button type="button" data-point-icon-preset="${esc(icon)}" title="${esc(icon)}">${esc(icon)}</button>`).join("")}</div>
+        <label class="point-unicode-row"><span>Unicode / emoji</span><input class="map-field" data-point-unicode="${esc(el.id)}" value="${esc(el.iconImage?"":(el.symbol||""))}" maxlength="16" placeholder="📍"></label>
+        <div class="point-icon-file-row"><button class="tiny-map-btn" type="button" data-point-icon-png="${esc(el.id)}">PNG</button>${el.iconImage?`<button class="tiny-map-btn danger" type="button" data-point-icon-clear="${esc(el.id)}">Quitar imagen</button>`:""}</div>
+      </div>
+    </details>`;
+  }
+
+  async function choosePointPng(){
+    const file=await new Promise(resolve=>{
+      const input=document.createElement("input");
+      input.type="file";input.accept="image/png,.png";
+      input.onchange=()=>resolve(input.files?.[0]||null);
+      input.click();
+    });
+    if(!file)return null;
+    const isPng=file.type==="image/png"||/\.png$/i.test(file.name||"");
+    if(!isPng){alert("El icono del marcador debe ser un archivo PNG.");return null}
+    return await readFileDataURL(file);
+  }
+
+  function updatePointMarkerVisual(m,el){
+    if(!el||el.kind!=="point")return;
+    const svg=$('[data-map-stage]');if(!svg)return;
+    const group=svg.querySelector(`.point-shape[data-map-element="${CSS.escape(el.id)}"]`);if(!group)return;
+    const circle=group.querySelector('circle');if(!circle)return;
+    const size=Number(el.size)||12;
+    const r=Math.max(.45,Math.min(3.2,size*.075));
+    const x=Number(el.x)||0,y=Number(el.y)||0;
+    circle.setAttribute('r',r);
+    group.querySelector('.map-point-symbol')?.remove();
+    group.querySelector('.map-point-image')?.remove();
+    if(el.iconImage){
+      const img=document.createElementNS('http://www.w3.org/2000/svg','image');
+      img.setAttribute('class','map-point-image');img.setAttribute('href',el.iconImage);
+      img.setAttribute('x',x-r*.68);img.setAttribute('y',y-r*.68);
+      img.setAttribute('width',r*1.36);img.setAttribute('height',r*1.36);
+      img.setAttribute('preserveAspectRatio','xMidYMid meet');img.setAttribute('pointer-events','none');
+      group.appendChild(img);
+    }else{
+      const text=document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('class','map-point-symbol');text.setAttribute('x',x);text.setAttribute('y',y+.15);
+      text.style.fontSize=`${Math.max(.9,Math.min(2.8,r*1.2))}px`;
+      text.textContent=el.symbol||'•';group.appendChild(text);
+    }
+  }
+
+
+  function mapLinkedEntity(el){
+    return el?.targetId?entities.find(x=>x.id===el.targetId)||null:null;
+  }
+
+  function renderMapElementArticleLink(el){
+    const linked=mapLinkedEntity(el);
+    const grouped=[...new Set(entities.map(x=>x.category))].map(cat=>{
+      const list=entities
+        .filter(x=>x.category===cat)
+        .sort((a,b)=>String(a.title||"").localeCompare(String(b.title||""),"es"));
+      if(!list.length)return "";
+      return `<optgroup label="${esc(categoryName(cat))}">${list.map(x=>`<option value="${x.id}" ${el.targetId===x.id?"selected":""}>${esc(x.title||x.id)}</option>`).join("")}</optgroup>`;
+    }).join("");
+
+    return `<div class="map-element-article-link">
+      <label class="map-link-toggle"><input type="checkbox" data-element-article-enabled="${el.id}" ${el.targetId?"checked":""}> Vincular a artículo</label>
+      <select class="map-field" data-element-article-select="${el.id}" ${el.targetId?"":"disabled"}>
+        <option value="">— Seleccionar artículo —</option>
+        ${grouped}
+      </select>
+      ${linked?`<small>Representa: ${esc(linked.title)} · ${esc(categoryName(linked.category))}</small>`:""}
+    </div>`;
+  }
+
   function renderCommonElementFields(m,el){
     const i=m.elements.indexOf(el);
+    const assigned=toArray(el.layerIds).map(id=>m.layers.find(l=>l.id===id)).filter(Boolean);
+    const available=m.layers.filter(l=>!el.layerIds?.includes(l.id));
+    const layerPicker=m.layers.length?`<div class="element-layer-picker">
+      <div class="element-layer-chips">${assigned.map(l=>`<span>${esc(l.name||"Capa")}<button data-remove-element-layer="${el.id}" data-layer-id="${l.id}" title="Quitar de esta capa">×</button></span>`).join("")}</div>
+      <select class="map-field" data-add-element-layer-select="${el.id}" ${available.length?"":"disabled"}>
+        <option value="">${available.length?"＋ Añadir capa":"Todas las capas asignadas"}</option>
+        ${available.map(l=>`<option value="${l.id}">${esc(l.name||"Capa")}</option>`).join("")}
+      </select>
+    </div>`:"";
     return `<div class="map-settings-grid">
       ${settingRow("Nombre",mapInput(`elements.${i}.name`,el.name))}
-      ${settingRow("Categoría",`<input class="map-field" list="map-category-list" data-map-path="elements.${i}.category" value="${esc(el.category||"")}"><datalist id="map-category-list">${[...categoryMap.entries()].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("")}</datalist>`)}
-      ${settingRow("Entidad vinculada",mapSelect(`elements.${i}.targetId`,el.targetId||"",[["","—"],...entities.filter(x=>x.id!==currentView.id).map(x=>[x.id,`${x.title} [${categoryName(x.category)}]`])]))}
       ${settingRow("Visible",mapCheckbox(`elements.${i}.visible`,el.visible!==false,"Mostrar"))}
+      ${settingRow("Nombre",mapCheckbox(`elements.${i}.label`,el.label!==false,"Mostrar nombre"))}
       ${settingRow("Color",`<input class="map-color" type="color" data-map-path="elements.${i}.style.color" value="${esc(el.style?.color||layerStyleFor(m,el).color||"#d4b27a")}">`)}
     </div>
-    <div class="single-column-map-options"><strong>Capas</strong><div class="map-check-list">${m.layers.length?m.layers.map(l=>`<label><input type="checkbox" data-element-layer="${el.id}" value="${l.id}" ${el.layerIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join(""):`<span>—</span>`}</div></div>
-    <label class="map-textarea-label"><span>Texto / explicación</span><textarea class="map-textarea" data-map-path="elements.${i}.note">${esc(el.note||"")}</textarea></label>`;
+    ${layerPicker}
+    ${renderMapElementArticleLink(el)}
+    ${renderElementInfoEditor(m,el)}`;
   }
+
 
   function renderNodeEditor(m,el){
     if(!["zone","route"].includes(el.kind))return "";
-    return `<div class="map-node-editor"><div class="map-mini-head"><strong>Nodos · ${toArray(el.nodes).length}</strong><button class="tiny-map-btn" data-append-node="${el.id}">＋ Nodo</button></div>
-      ${toArray(el.nodes).length?`<div class="compact-node-list">${toArray(el.nodes).map((n,i)=>`<span>N${i+1}<button class="tiny-map-btn danger" data-remove-node="${i}" data-node-owner="${el.id}">×</button></span>`).join("")}</div>`:`<div class="empty small">Sin nodos.</div>`}
-    </div>`;
+    return `<div class="map-node-editor compact-node-help"><strong>Nodos · ${toArray(el.nodes).length}</strong><span>Doble clic en el borde: añadir · doble clic en un nodo: quitar</span></div>`;
   }
 
   function renderPointSpecific(m,el){
     const i=m.elements.indexOf(el),otherPoints=m.elements.filter(x=>x.kind==="point"&&x.id!==el.id);
     return `<h4>Punto</h4>
       <div class="derived-strip multi">${mapScaleXY(m).sx?`<span>Distancia a otro punto <select class="map-inline-select" data-point-distance-target="${el.id}"><option value="">—</option>${otherPoints.map(p=>`<option value="${p.id}">${esc(p.name||"Punto")}</option>`).join("")}</select> <strong data-point-distance-result>—</strong></span>`:""}</div>
+      ${renderPointIconSelector(m,el)}
       <div class="map-settings-grid">
-        ${settingRow("Símbolo",mapInput(`elements.${i}.symbol`,el.symbol||"",{placeholder:"•"}))}
-        ${settingRow("Tamaño",mapInput(`elements.${i}.size`,el.size,{type:"number",min:4,max:40,step:1}))}
-        ${settingRow("Etiqueta",mapCheckbox(`elements.${i}.label`,el.label!==false,"Mostrar nombre"))}
+        ${settingRow("Tamaño",mapRange(`elements.${i}.size`,el.size||12,{min:6,max:40,step:1}))}
       </div>`;
   }
 
@@ -2945,7 +3151,7 @@
       <div class="derived-strip multi"><span>Longitud <strong>${formatDistance(meters,m)}</strong></span></div>
       <div class="map-settings-grid">
         ${settingRow("Trazo",mapSelect(`elements.${i}.strokeType`,el.strokeType||"solid",[["solid","Continuo"],["dashed","Discontinuo"],["dotted","Punteado"]]))}
-        ${settingRow("Grosor",mapInput(`elements.${i}.style.lineWidth`,el.style?.lineWidth??"",{type:"number",min:.5,max:12,step:.5}))}
+        ${settingRow("Grosor",mapRange(`elements.${i}.style.lineWidth`,el.style?.lineWidth||2,{min:.75,max:16,step:.25}))}
         ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,el.direction||"none",[["none","Sin dirección"],["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
         ${settingRow("Flechas",mapCheckbox(`elements.${i}.arrows`,el.arrows,"Mostrar"))}
       </div>
@@ -2957,8 +3163,8 @@
     return `<h4>Zona</h4>
       <div class="derived-strip multi"><span>Área <strong>${formatArea(area,m)}</strong></span><span>Perímetro <strong>${formatDistance(per,m)}</strong></span></div>
       <div class="map-settings-grid">
-        ${settingRow("Opacidad",mapInput(`elements.${i}.fillOpacity`,el.fillOpacity,{type:"number",min:0,max:1,step:.05}))}
-        ${settingRow("Borde",mapInput(`elements.${i}.borderWidth`,el.borderWidth,{type:"number",min:.1,max:12,step:.1}))}
+        ${settingRow("Opacidad",mapRange(`elements.${i}.fillOpacity`,el.fillOpacity===""||el.fillOpacity==null?.14:el.fillOpacity,{min:0,max:.65,step:.05}))}
+        ${settingRow("Borde",mapRange(`elements.${i}.borderWidth`,el.borderWidth||2,{min:.5,max:12,step:.25}))}
       </div>
       <details class="map-advanced-shape"><summary>Forma avanzada</summary><div class="zone-part-actions"><button class="tiny-map-btn" data-draw-zone-part="${el.id}">＋ Parte</button><button class="tiny-map-btn" data-draw-zone-hole="${el.id}">＋ Hueco</button><span>${toArray(el.parts).length} partes · ${toArray(el.holes).length} huecos</span></div>${renderNodeEditor(m,el)}</details>`;
   }
@@ -2982,20 +3188,21 @@
   }
 
 
+
   function renderRouteSpecific(m,r){
     const i=m.elements.indexOf(r);
     const mode=r.routeMode||"route";
-    const modeControl=`<label class="route-mode-checkbox"><input type="checkbox" data-route-line-mode="${r.id}" ${mode==="line"?"checked":""}> Línea</label>`;
-    if(mode==="line") return `${modeControl}${renderLineSpecific(m,r)}`;
+    if(mode==="line") return renderLineSpecific(m,r);
 
     const stats=routeStats(m,r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
-    return `${modeControl}<h4>Ruta</h4>
+    return `<h4>Ruta</h4>
       <div class="derived-strip multi"><span>Distancia <strong>${formatDistance(stats.meters,m)}</strong></span><span>Duración calculada <strong>${stats.seconds?`${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}`:"—"}</strong></span>${stats.avgUnit?`<span>Velocidad media <strong>${fmtNumber(stats.avgUnit)} ${speedUnit}</strong></span>`:""}</div>
       ${stats.zones.length?`<div class="route-zones"><strong>Zonas atravesadas</strong>${stats.zones.map(z=>`<span>${esc(z.name)} · ≈${fmtNumber(z.ratio*100,1)}%</span>`).join("")}</div>`:""}
       ${r.proposal?`<button class="map-action accept-route" data-accept-route="${r.id}">Aceptar propuesta</button>`:""}
       <div class="map-settings-grid">
         ${settingRow("Origen",`<select class="map-field" data-map-path="elements.${i}.originPointId"><option value="">—</option>${m.elements.filter(x=>x.kind==="point").map(p=>`<option value="${p.id}" ${r.originPointId===p.id?"selected":""} ${r.destinationPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
         ${settingRow("Destino",`<select class="map-field" data-map-path="elements.${i}.destinationPointId"><option value="">—</option>${m.elements.filter(x=>x.kind==="point").map(p=>`<option value="${p.id}" ${r.destinationPointId===p.id?"selected":""} ${r.originPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
+        ${settingRow("Ancho",mapRange(`elements.${i}.style.lineWidth`,r.style?.lineWidth||2,{min:.75,max:16,step:.25}))}
         ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,r.direction||"forward",[["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
         ${settingRow("Transporte",mapInput(`elements.${i}.transport`,r.transport||""))}
         ${settingRow("Velocidad",mapSelect(`elements.${i}.speedMode`,r.speedMode||"fixed",[["fixed","Fija"],["interval","Intervalo"],["segments","Por tramo"],["knownTime","Tiempo conocido"]]))}
@@ -3029,7 +3236,6 @@
       <div class="map-config-body">
         ${renderCommonElementFields(m,el)}
         ${el.kind==="point"?renderPointSpecific(m,el):el.kind==="zone"?renderZoneSpecific(m,el):renderRouteSpecific(m,el)}
-        ${renderElementMedia(m,el)}
       </div>
     </section>`;
   }
@@ -3113,8 +3319,25 @@
 
   function refreshPlaceTab(e){
     const active=$('.character-tab.active')?.dataset.placeTab||'description';
+    let map=null,view=null;
+    if(active==='maps'){
+      map=activePlaceMap(e);
+      if(map){
+        view=currentMapView(map);
+        view.panelScrollByTab ||= {};
+        const currentTab=$('.map-panel-tab.active')?.dataset.mapPanelTab||view.panelTab||'elements';
+        const scroll=$('.map-side-panel-scroll');
+        if(scroll)view.panelScrollByTab[currentTab]=scroll.scrollTop;
+      }
+    }
     $('#characterTabPanel').innerHTML=renderPlaceTab(e,active);
     wirePlaceTab(e);
+    if(map&&view){
+      requestAnimationFrame(()=>{
+        const scroll=$('.map-side-panel-scroll');
+        if(scroll)scroll.scrollTop=Number(view.panelScrollByTab?.[view.panelTab]||0);
+      });
+    }
   }
 
   async function addPlaceMediaAtPath(e,path,textPath=""){
@@ -3254,19 +3477,76 @@
     m.elements.push(r);selectedPlaceMapElementId=r.id;currentMapView(m).panelTab="selected";saveMapAndRefresh(e);
   }
 
+
+
+  function pointSegmentDistance(p,a,b){
+    const ax=Number(a.x)||0,ay=Number(a.y)||0,bx=Number(b.x)||0,by=Number(b.y)||0,px=Number(p.x)||0,py=Number(p.y)||0;
+    const dx=bx-ax,dy=by-ay,len2=dx*dx+dy*dy;
+    if(!len2)return Math.hypot(px-ax,py-ay);
+    const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/len2));
+    return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+  }
+
+  function nearestSegmentInsertIndex(nodes,p,closed=false){
+    const pts=toArray(nodes);if(pts.length<2)return pts.length;
+    let best=1,bestD=Infinity;
+    const count=closed?pts.length:pts.length-1;
+    for(let i=0;i<count;i++){
+      const a=pts[i],b=pts[(i+1)%pts.length],d=pointSegmentDistance(p,a,b);
+      if(d<bestD){bestD=d;best=i+1}
+    }
+    return Math.min(best,pts.length);
+  }
+
   function updateSvgSelectedGeometry(m,el){
     const svg=$('[data-map-stage]');if(!svg)return;
     const shape=svg.querySelector(`[data-map-element="${CSS.escape(el.id)}"].map-shape`);
+    const label=svg.querySelector(`.map-element-label[data-map-element="${CSS.escape(el.id)}"]`);
+
     if(el.kind==="point"){
-      const circle=shape?.querySelector('circle');if(circle){circle.setAttribute('cx',el.x);circle.setAttribute('cy',el.y)}
-    }else if(shape){shape.setAttribute('points',svgPoints(el.nodes))}
+      const circle=shape?.querySelector('circle');
+      const symbol=shape?.querySelector('.map-point-symbol');
+      const image=shape?.querySelector('.map-point-image');
+      const size=Number(el.size)||12,r=Math.max(.45,Math.min(3.2,size*.075));
+      if(circle){circle.setAttribute('cx',el.x);circle.setAttribute('cy',el.y);circle.setAttribute('r',r)}
+      if(symbol){symbol.setAttribute('x',el.x);symbol.setAttribute('y',(Number(el.y)||0)+.15)}
+      if(image){image.setAttribute('x',(Number(el.x)||0)-r*.68);image.setAttribute('y',(Number(el.y)||0)-r*.68);image.setAttribute('width',r*1.36);image.setAttribute('height',r*1.36)}
+      if(label){label.setAttribute('x',el.x);label.setAttribute('y',(Number(el.y)||0)-2.1)}
+    }else if(el.kind==="zone"){
+      if(shape){
+        const rings=[toArray(el.nodes),...toArray(el.parts),...toArray(el.holes)].filter(r=>r.length>2);
+        const pathD=rings.map(r=>`M ${r.map(p=>`${Number(p.x)||0} ${Number(p.y)||0}`).join(" L ")} Z`).join(" ");
+        shape.setAttribute('d',pathD);
+      }
+      if(label&&el.nodes?.length){
+        const x=el.nodes.reduce((a,p)=>a+Number(p.x),0)/el.nodes.length;
+        const y=el.nodes.reduce((a,p)=>a+Number(p.y),0)/el.nodes.length;
+        label.setAttribute('x',x);label.setAttribute('y',y);
+      }
+    }else if(el.kind==="route"){
+      {
+        const lineMode=(el.routeMode||"route")==="line";
+        let nodes=lineMode?toArray(el.nodes):routeNodesForCalc(el);
+        if(lineMode&&Number(el.smoothing)>0)nodes=smoothPolyline(nodes,Number(el.smoothing));
+        const pts=svgPoints(nodes);
+        if(shape)shape.setAttribute('points',pts);
+        svg.querySelector(`.map-route-hit[data-map-element="${CSS.escape(el.id)}"]`)?.setAttribute('points',pts);
+      }
+      if(label&&el.nodes?.length){
+        const x=el.nodes.reduce((a,p)=>a+Number(p.x),0)/el.nodes.length;
+        const y=el.nodes.reduce((a,p)=>a+Number(p.y),0)/el.nodes.length;
+        label.setAttribute('x',x);label.setAttribute('y',y);
+      }
+    }
+
     svg.querySelectorAll('.map-node-handle').forEach(h=>{
       const part=h.dataset.nodePart,idx=Number(h.dataset.nodeIndex),pi=Number(h.dataset.partIndex||0);let p;
-      if(part==="point")p={x:el.x,y:el.y};else if(part==="nodes")p=el.nodes[idx];else p=el[part]?.[pi]?.[idx];
+      if(part==="point")p={x:el.x,y:el.y};
+      else if(part==="nodes")p=el.nodes[idx];
+      else p=el[part]?.[pi]?.[idx];
       if(p){h.setAttribute('cx',p.x);h.setAttribute('cy',p.y)}
     });
   }
-
 
   function applyMapCanvasView(m){
     const canvas=$('[data-map-canvas]');if(!canvas)return;
@@ -3344,7 +3624,7 @@
     let pan=null;
     viewport.onpointerdown=ev=>{
       if(ev.button!==0)return;
-      if(ev.target.closest('[data-map-bottom-controls],[data-map-side-panel],.map-node-handle'))return;
+      if(ev.target.closest('[data-map-bottom-controls],[data-map-side-panel],.map-node-handle,[data-map-element]'))return;
       if(editMode&&placeMapTool?.mapId===m.id)return;
       const v=currentMapView(m);
       pan={id:ev.pointerId,startX:ev.clientX,startY:ev.clientY,panX:v.panX,panY:v.panY,moved:false};
@@ -3398,12 +3678,14 @@
         if(t.mode==="draw-point"){
           const el=applyDefaultLevel(m,newMapElement("point",[p]));m.elements.push(el);selectedPlaceMapElementId=el.id;currentMapView(m).panelTab="selected";placeMapTool=null;await saveMapAndRefresh(e);return;
         }
+        const tolerance=Math.max(.65,1.55/Math.max(.5,currentMapView(m).zoom||1));
         if(t.mode==="draw-zone"&&t.nodes.length>=3){
           const first=t.nodes[0];
-          const tolerance=Math.max(.65,1.55/Math.max(.5,currentMapView(m).zoom||1));
-          if(Math.hypot(p.x-first.x,p.y-first.y)<=tolerance){
-            finishMapTool(e,m);return;
-          }
+          if(Math.hypot(p.x-first.x,p.y-first.y)<=tolerance){finishMapTool(e,m);return}
+        }
+        if(t.mode==="draw-route"&&t.nodes.length>=2){
+          const last=t.nodes[t.nodes.length-1];
+          if(Math.hypot(p.x-last.x,p.y-last.y)<=tolerance){finishMapTool(e,m);return}
         }
         t.nodes.push(p);refreshPlaceTab(e);return;
       }
@@ -3422,8 +3704,59 @@
       if(!editMode&&activeMapInfoElementId){activeMapInfoElementId="";refreshPlaceTab(e);return}
     };
 
+    if(editMode){
+      svg.ondblclick=async ev=>{
+        ev.preventDefault();ev.stopPropagation();
+        const el=placeMapElement(m);if(!el||!["zone","route"].includes(el.kind))return;
+        const handle=ev.target.closest?.('.map-node-handle');
+        if(handle){
+          const part=handle.dataset.nodePart,index=Number(handle.dataset.nodeIndex),pi=Number(handle.dataset.partIndex||0);
+          if(part==="nodes"){
+            const minimum=el.kind==="zone"?3:2;
+            if(el.nodes.length<=minimum)return;
+            el.nodes.splice(index,1);
+          }else if(el[part]?.[pi]&&el[part][pi].length>3){
+            el[part][pi].splice(index,1);
+          }else return;
+          updateSvgSelectedGeometry(m,el);
+          await saveEntityDirect(e);refreshPlaceTab(e);return;
+        }
+        const target=ev.target.closest?.('[data-map-element]');
+        if(!target||target.dataset.mapElement!==el.id)return;
+        const p=eventMapPoint(svg,ev,m);
+        const idx=nearestSegmentInsertIndex(el.nodes,p,el.kind==="zone");
+        el.nodes.splice(idx,0,p);
+        updateSvgSelectedGeometry(m,el);
+        await saveEntityDirect(e);refreshPlaceTab(e);
+      };
+    }
+
     let drag=null;
     if(!editMode)return;
+
+    // Punto seleccionado: se mueve arrastrando el propio marcador, sin círculo auxiliar.
+    const selectedPoint=placeMapElement(m);
+    const pointShape=selectedPoint?.kind==="point"?svg.querySelector(`.point-shape[data-map-element="${CSS.escape(selectedPoint.id)}"]`):null;
+    if(pointShape){
+      let pointDrag=null;
+      pointShape.onpointerdown=ev=>{
+        if(ev.button!==0)return;ev.preventDefault();ev.stopPropagation();
+        pointDrag={id:ev.pointerId,startX:ev.clientX,startY:ev.clientY,moved:false};
+        try{pointShape.setPointerCapture(ev.pointerId)}catch{}
+      };
+      pointShape.onpointermove=ev=>{
+        if(!pointDrag||pointDrag.id!==ev.pointerId)return;
+        if(Math.hypot(ev.clientX-pointDrag.startX,ev.clientY-pointDrag.startY)>2)pointDrag.moved=true;
+        const p=eventMapPoint(svg,ev,m);selectedPoint.x=p.x;selectedPoint.y=p.y;updateSvgSelectedGeometry(m,selectedPoint);
+      };
+      pointShape.onpointerup=async ev=>{
+        if(!pointDrag||pointDrag.id!==ev.pointerId)return;
+        if(pointDrag.moved)currentMapView(m).justPanned=true;
+        try{pointShape.releasePointerCapture(ev.pointerId)}catch{}
+        pointDrag=null;await saveEntityDirect(e);
+      };
+      pointShape.onpointercancel=()=>{pointDrag=null};
+    }
     svg.querySelectorAll('.map-node-handle').forEach(handle=>{
       handle.onpointerdown=ev=>{ev.preventDefault();ev.stopPropagation();handle.setPointerCapture(ev.pointerId);drag={handle,pointerId:ev.pointerId,part:handle.dataset.nodePart,index:Number(handle.dataset.nodeIndex),partIndex:Number(handle.dataset.partIndex||0)}};
       handle.onpointermove=ev=>{
@@ -3457,22 +3790,16 @@
       ev.currentTarget.title=v.panelCollapsed?'Abrir panel':'Reducir panel';
     });
     $('[data-close-map-info]')?.addEventListener('click',ev=>{ev.stopPropagation();activeMapInfoElementId="";refreshPlaceTab(e)});
+    $$('[data-open-map-article]').forEach(btn=>btn.onclick=()=>{
+      const id=btn.dataset.openMapArticle;
+      if(document.fullscreenElement)document.exitFullscreen?.();
+      showEntity(id);
+    });
     if(!editMode)return;
 
     $$('[data-map-panel-tab]').forEach(btn=>btn.onclick=()=>{
       const v=currentMapView(m);
       v.panelTab=btn.dataset.mapPanelTab;
-      refreshPlaceTab(e);
-    });
-    $('[data-new-route-line]')?.addEventListener('change',ev=>{
-      const v=currentMapView(m);
-      v.newRouteAsLine=ev.currentTarget.checked;
-      if(v.newRouteAsLine)v.routeGeneratorOpen=false;
-      refreshPlaceTab(e);
-    });
-    $('[data-toggle-route-generator]')?.addEventListener('click',()=>{
-      const v=currentMapView(m);
-      v.routeGeneratorOpen=!v.routeGeneratorOpen;
       refreshPlaceTab(e);
     });
 
@@ -3494,43 +3821,162 @@
     });
 
 
+    const panelScroll=$('.map-side-panel-scroll');
+    if(panelScroll){
+      panelScroll.onscroll=()=>{
+        const v=currentMapView(m);v.panelScrollByTab||={};v.panelScrollByTab[v.panelTab||'elements']=panelScroll.scrollTop;
+      };
+    }
+
+    $$('[data-point-icon-preset]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m);if(!el||el.kind!=="point")return;
+      el.symbol=btn.dataset.pointIconPreset||"•";el.iconImage="";
+      updatePointMarkerVisual(m,el);await saveEntityDirect(e);
+      const current=$('.point-icon-current');if(current)current.innerHTML=`<span>${esc(el.symbol)}</span>`;
+      const unicode=$(`[data-point-unicode="${CSS.escape(el.id)}"]`);if(unicode)unicode.value=el.symbol;
+    });
+    $$('[data-point-unicode]').forEach(input=>{
+      input.oninput=()=>{
+        const el=placeMapElement(m,input.dataset.pointUnicode);if(!el||el.kind!=="point")return;
+        el.symbol=input.value||"•";el.iconImage="";updatePointMarkerVisual(m,el);
+        const current=$('.point-icon-current');if(current)current.innerHTML=`<span>${esc(el.symbol)}</span>`;
+      };
+      input.onchange=async()=>{const el=placeMapElement(m,input.dataset.pointUnicode);if(el)await saveEntityDirect(e)};
+    });
+    $$('[data-point-icon-png]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m,btn.dataset.pointIconPng);if(!el||el.kind!=="point")return;
+      const src=await choosePointPng();if(!src)return;
+      el.iconImage=src;updatePointMarkerVisual(m,el);await saveEntityDirect(e);
+      const current=$('.point-icon-current');if(current)current.innerHTML=`<img src="${src}" alt="">`;
+    });
+    $$('[data-point-icon-clear]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m,btn.dataset.pointIconClear);if(!el||el.kind!=="point")return;
+      el.iconImage="";if(!el.symbol)el.symbol="•";updatePointMarkerVisual(m,el);await saveEntityDirect(e);refreshPlaceTab(e);
+    });
+
+    $$('.map-range[data-map-path]').forEach(input=>{
+      const output=input.parentElement?.querySelector('[data-map-range-output]');
+      input.oninput=()=>{
+        const path=input.dataset.mapPath;const value=parseMapInputValue(input);setMapPath(m,path,value);
+        if(output)output.textContent=String(value);
+        const idx=path.startsWith('elements.')?Number(path.split('.')[1]):-1,el=idx>=0?m.elements[idx]:null;
+        const svg=$('[data-map-stage]');
+        if(el&&svg){
+          if(el.kind==='point'&&path.endsWith('.size'))updatePointMarkerVisual(m,el);
+          if(el.kind==='zone'&&path.endsWith('.fillOpacity'))svg.querySelector(`.zone-shape[data-map-element="${CSS.escape(el.id)}"]`)?.setAttribute('fill-opacity',value);
+          if(el.kind==='zone'&&path.endsWith('.borderWidth'))svg.querySelector(`.zone-shape[data-map-element="${CSS.escape(el.id)}"]`)?.setAttribute('stroke-width',Math.max(.16,Number(value)*.16));
+          if(el.kind==='route'&&path.endsWith('.style.lineWidth')){
+            const st=mapElementStyle(m,el),visual=Math.max(.18,st.width*.19);
+            svg.querySelector(`.map-shape[data-map-element="${CSS.escape(el.id)}"]`)?.setAttribute('stroke-width',visual);
+            svg.querySelector(`.map-route-hit[data-map-element="${CSS.escape(el.id)}"]`)?.setAttribute('stroke-width',Math.max(2.4,visual*5.5));
+          }
+        }
+      };
+      input.onchange=async()=>{await saveEntityDirect(e)};
+    });
+
     $$('.map-color[data-map-path]').forEach(input=>{
       input.oninput=()=>{
         const path=input.dataset.mapPath;
-        setMapPath(m,path,input.value);
-        if(path.startsWith('elements.')){
-          const idx=Number(path.split('.')[1]);
-          const el=m.elements[idx];
-          if(el){
-            const shape=$(`[data-map-stage] .map-shape[data-map-element="${CSS.escape(el.id)}"]`);
-            const color=input.value;
-            if(shape){
-              if(el.kind==="point"){
-                shape.querySelector('circle')?.setAttribute('fill',color);
-              }else if(el.kind==="zone"){
-                shape.setAttribute('fill',color);shape.setAttribute('stroke',color);
-              }else{
-                shape.setAttribute('stroke',color);
-              }
+        const color=input.value;
+        setMapPath(m,path,color);
+
+        const paintElement=(el)=>{
+          const svg=$('[data-map-stage]');if(!svg||!el)return;
+          const shape=svg.querySelector(`.map-shape[data-map-element="${CSS.escape(el.id)}"]`);
+          if(shape){
+            if(el.kind==="point"){
+              shape.querySelector('circle')?.setAttribute('fill',color);
+            }else if(el.kind==="zone"){
+              shape.setAttribute('fill',color);
+              shape.setAttribute('stroke',color);
+              shape.setAttribute('fill-opacity',String(el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):0.14));
+            }else{
+              shape.setAttribute('stroke',color);
             }
           }
+          if(el.id===selectedPlaceMapElementId){
+            svg.querySelectorAll('.map-node-handle').forEach(h=>{
+              h.style.fill=color;
+              h.style.stroke='rgba(18,16,18,.82)';
+            });
+          }
+        };
+
+        if(path.startsWith('elements.')){
+          const idx=Number(path.split('.')[1]);
+          paintElement(m.elements[idx]);
         }else if(path.startsWith('layers.')){
           const layerIndex=Number(path.split('.')[1]);
           const layer=m.layers[layerIndex];
           if(layer){
             for(const el of m.elements.filter(x=>x.layerIds?.includes(layer.id)&&!(x.style?.color))){
-              const shape=$(`[data-map-stage] .map-shape[data-map-element="${CSS.escape(el.id)}"]`);
-              if(!shape)continue;
-              if(el.kind==="point")shape.querySelector('circle')?.setAttribute('fill',input.value);
-              else if(el.kind==="zone"){shape.setAttribute('fill',input.value);shape.setAttribute('stroke',input.value)}
-              else shape.setAttribute('stroke',input.value);
+              paintElement(el);
             }
           }
         }
       };
     });
 
+    $$('[data-add-info-block]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m,btn.dataset.infoOwner);if(!el)return;
+      el.infoBlocks||=[];el.infoBlocks.push({type:btn.dataset.addInfoBlock||"paragraph",text:""});
+      await saveEntityDirect(e);refreshPlaceTab(e);
+    });
+    $$('[data-add-info-media]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m,btn.dataset.addInfoMedia);if(!el)return;
+      const items=await chooseMediaMany();if(!items.length)return;
+      el.infoBlocks||=[];for(const item of items)el.infoBlocks.push({type:"media",item});
+      await saveEntityDirect(e);refreshPlaceTab(e);
+    });
+    $$('[data-remove-info-block]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m,btn.dataset.infoOwner);if(!el)return;
+      el.infoBlocks||=[];el.infoBlocks.splice(Number(btn.dataset.removeInfoBlock),1);
+      await saveEntityDirect(e);refreshPlaceTab(e);
+    });
+    $$('[data-info-block-text]').forEach(input=>input.onchange=async()=>{
+      const el=placeMapElement(m,input.dataset.infoOwner);const block=el?.infoBlocks?.[Number(input.dataset.infoBlockText)];if(!block)return;
+      block.text=input.value;await saveEntityDirect(e);
+    });
+    $$('[data-info-caption]').forEach(input=>input.onchange=async()=>{
+      const el=placeMapElement(m,input.dataset.infoOwner);const block=el?.infoBlocks?.[Number(input.dataset.infoCaption)];if(!block?.item)return;
+      block.item.caption=input.value;await saveEntityDirect(e);
+    });
+
+    $$('[data-element-article-enabled]').forEach(input=>input.onchange=async()=>{
+      const el=placeMapElement(m,input.dataset.elementArticleEnabled);if(!el)return;
+      const select=$(`[data-element-article-select="${CSS.escape(el.id)}"]`);
+      if(input.checked){
+        select?.removeAttribute('disabled');
+        if(select?.value)el.targetId=select.value;
+      }else{
+        el.targetId="";
+        if(select){select.value="";select.setAttribute('disabled',"")}
+      }
+      await saveEntityDirect(e);
+      refreshPlaceTab(e);
+    });
+    $$('[data-element-article-select]').forEach(sel=>sel.onchange=async()=>{
+      const el=placeMapElement(m,sel.dataset.elementArticleSelect);if(!el)return;
+      el.targetId=sel.value||"";
+      await saveEntityDirect(e);
+      refreshPlaceTab(e);
+    });
+
+    $$('[data-add-element-layer-select]').forEach(sel=>sel.onchange=async()=>{
+      const el=placeMapElement(m,sel.dataset.addElementLayerSelect);if(!el||!sel.value)return;
+      el.layerIds||=[];if(!el.layerIds.includes(sel.value))el.layerIds.push(sel.value);
+      await saveMapAndRefresh(e);
+    });
+    $$('[data-remove-element-layer]').forEach(btn=>btn.onclick=async()=>{
+      const el=placeMapElement(m,btn.dataset.removeElementLayer);if(!el)return;
+      el.layerIds=toArray(el.layerIds).filter(id=>id!==btn.dataset.layerId);
+      await saveMapAndRefresh(e);
+    });
+
+
     $$('[data-map-path]').forEach(input=>{
+      if(input.classList.contains('map-range'))return;
       const handler=async()=>{
         const path=input.dataset.mapPath;if(path.startsWith('__'))return;
         let value=parseMapInputValue(input);
@@ -3569,8 +4015,7 @@
     $$('[data-draw-tool]').forEach(btn=>btn.onclick=()=>{
       if(!m.image?.src){alert('Carga primero una imagen base.');return}
       const mode=btn.dataset.drawTool;
-      const v=currentMapView(m);
-      const drawMode=mode==='point'?'draw-point':mode==='zone'?'draw-zone':(v.newRouteAsLine?'draw-line':'draw-route');
+      const drawMode=mode==='point'?'draw-point':mode==='zone'?'draw-zone':'draw-route';
       placeMapTool={mode:drawMode,mapId:m.id,nodes:[]};
       refreshPlaceTab(e);
     });
@@ -3585,15 +4030,6 @@
     });
     $$('[data-delete-map-element]').forEach(btn=>btn.onclick=async()=>{const idx=m.elements.findIndex(x=>x.id===btn.dataset.deleteMapElement);if(idx<0)return;const removed=m.elements[idx];m.elements.splice(idx,1);cleanupMapReferences(m,removed);if(selectedPlaceMapElementId===btn.dataset.deleteMapElement)selectedPlaceMapElementId="";await saveMapAndRefresh(e)});
     $$('[data-element-visible]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementVisible);if(el){el.visible=c.checked;await saveMapAndRefresh(e)}});
-    $$('[data-element-layer]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLayer);if(el){el.layerIds||=[];updateListFromChecks(el.layerIds,c.checked,c.value);await saveMapAndRefresh(e)}});
-
-    $$('[data-route-line-mode]').forEach(c=>c.onchange=async()=>{
-      const r=placeMapElement(m,c.dataset.routeLineMode);if(!r)return;
-      r.routeMode=c.checked?"line":"route";
-      if(r.routeMode==="line"&&(r.direction==="forward"||!r.direction))r.direction="none";
-      if(r.routeMode==="route"&&r.direction==="none")r.direction="forward";
-      await saveMapAndRefresh(e);
-    });
 
     $$('[data-route-waypoint]').forEach(c=>c.onchange=async()=>{const r=placeMapElement(m,c.dataset.routeWaypoint);if(!r)return;r.waypointPointIds||=[];updateListFromChecks(r.waypointPointIds,c.checked,c.value);await saveMapAndRefresh(e)});
     $$('[data-point-distance-target]').forEach(sel=>sel.onchange=()=>{const a=placeMapElement(m,sel.dataset.pointDistanceTarget),b=placeMapElement(m,sel.value),out=sel.parentElement.querySelector('[data-point-distance-result]');if(!a||!b||!out){if(out)out.textContent='—';return}out.textContent=formatDistance(segmentMeters(m,{x:a.x,y:a.y},{x:b.x,y:b.y}),m)});
@@ -3608,8 +4044,6 @@
     $$('[data-accept-route]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.acceptRoute);if(!r)return;r.proposal=false;if(r.name==='Ruta propuesta')r.name='Ruta';await saveMapAndRefresh(e)});
     $$('[data-regenerate-route-section]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.regenerateRouteSection);if(!r)return;const wrap=btn.closest('.route-regenerate'),inputs=wrap.querySelectorAll('[data-map-path^="__regen"]');const from=Math.max(0,Number(inputs[0]?.value)||0),to=Math.min(r.nodes.length-1,Number(inputs[1]?.value)||r.nodes.length-1);if(to<=from)return;let repl=densifyPolyline([r.nodes[from],r.nodes[to]],Math.max(2,Number(m.settings.routeDefaults.pointDensity)||2));repl=smoothPolyline(repl,Number(m.settings.routeDefaults.smoothness)||0);r.nodes.splice(from,to-from+1,...repl);await saveMapAndRefresh(e)});
 
-    $$('[data-add-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.addElementMedia);if(!el)return;const items=await chooseMediaMany();if(!items.length)return;el.media||=[];el.media.push(...items);await saveMapAndRefresh(e)});
-    $$('[data-remove-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.mediaOwner);if(!el)return;el.media.splice(Number(btn.dataset.removeElementMedia),1);await saveMapAndRefresh(e)});
 
     $$('[data-generator-field]').forEach(input=>input.onchange=async()=>{
       const key=input.dataset.generatorField;
@@ -3648,6 +4082,24 @@
     $('[data-place-add-gallery]')?.addEventListener('click',async()=>{const items=await chooseMediaMany();if(!items.length)return;placeData(e).gallery.push(...items);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-remove-gallery]').forEach(btn=>btn.onclick=async()=>{placeData(e).gallery.splice(Number(btn.dataset.placeRemoveGallery),1);await saveEntityDirect(e);refreshPlaceTab(e)});
     $$('[data-place-select-path]').forEach(sel=>sel.onchange=async()=>{setPath(e,sel.dataset.placeSelectPath,sel.value);await saveEntityDirect(e)});
+    $('[data-place-parent-enabled]')?.addEventListener('change',async ev=>{
+      const p=placeData(e);
+      const select=$('[data-place-parent-select]');
+      if(ev.currentTarget.checked){
+        select?.removeAttribute('disabled');
+        if(select?.value)p.parentPlaceId=select.value;
+      }else{
+        p.parentPlaceId="";
+        if(select){select.value="";select.setAttribute('disabled',"")}
+      }
+      await saveEntityDirect(e);
+      refreshPlaceTab(e);
+    });
+    $('[data-place-parent-select]')?.addEventListener('change',async ev=>{
+      placeData(e).parentPlaceId=ev.currentTarget.value||"";
+      await saveEntityDirect(e);
+      refreshPlaceTab(e);
+    });
     const active=$('.character-tab.active')?.dataset.placeTab;if(active==='maps'){const m=activePlaceMap(e);if(m)wirePlaceMap(e,m)}
     applyMediaRules();
     // A6.6.9: no reparación automática posterior; la colocación solo cambia por acción del usuario.

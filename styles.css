@@ -2116,3 +2116,243 @@ body.edit-mode .inline-edit-mode-toggle{
 .place-map-viewport.map-tab-mode{
   display:block!important;
 }
+
+
+/* A6.7.8 — pestañas laterales más compactas */
+.map-panel-tabs{
+  display:flex!important;
+  grid-template-columns:none!important;
+  justify-content:flex-start!important;
+  gap:5px!important;
+  padding-right:42px!important;
+}
+.map-panel-tab{
+  flex:0 0 42px!important;
+  width:42px!important;
+  min-width:42px!important;
+  max-width:42px!important;
+  padding:0!important;
+}
+
+
+/* A6.7.8 — nodos usan el mismo color del elemento */
+.map-node-handle,
+.map-node-handle.part-handle,
+.map-node-handle.hole-handle{
+  fill:inherit;
+}
+
+
+/* A6.7.9 — edición directa de elementos, nodos pequeños y panel informativo */
+.map-route-hit{cursor:pointer;vector-effect:non-scaling-stroke}
+.map-node-handle{cursor:grab!important;vector-effect:non-scaling-stroke}
+.map-node-handle:active{cursor:grabbing!important}
+
+.element-layer-picker{display:grid;gap:6px;margin:2px 0 8px}
+.element-layer-chips{display:flex;gap:5px;flex-wrap:wrap}
+.element-layer-chips span{display:inline-flex;align-items:center;gap:4px;padding:4px 6px;border:1px solid rgba(212,178,122,.13);border-radius:999px;background:rgba(35,40,48,.55);color:#c5ad89;font-size:7.8px}
+.element-layer-chips button{border:0;background:none;color:#b69379;cursor:pointer;padding:0 1px}
+
+.element-info-editor{display:grid;gap:7px;margin-top:5px;padding-top:7px;border-top:1px solid rgba(212,178,122,.10)}
+.element-info-add-row{display:flex;gap:4px;flex-wrap:wrap}
+.element-info-blocks{display:grid;gap:7px}
+.element-info-block{position:relative;padding:7px;border:1px solid rgba(212,178,122,.10);border-radius:8px;background:rgba(12,17,22,.55)}
+.element-info-block.title-block input{font-family:Georgia,"Times New Roman",serif;font-size:12px;font-weight:700}
+.element-info-block.subtitle-block input{font-family:Georgia,"Times New Roman",serif;font-size:10px;font-weight:700}
+.element-info-remove{position:absolute;right:4px;top:4px;z-index:3;width:21px;height:21px;border:1px solid rgba(160,80,80,.20);border-radius:6px;background:rgba(78,38,42,.55);color:#d4aaa5;cursor:pointer}
+.element-info-block .map-field,.element-info-block .map-textarea{padding-right:28px}
+.element-info-block.media-block img,.element-info-block.media-block video{display:block;max-width:100%;max-height:180px;margin:0 auto 6px;border-radius:7px;object-fit:contain;background:#0c1015}
+.element-info-caption{width:100%}
+
+.map-info-rich{display:grid;gap:9px}
+.map-info-rich h3,.map-info-rich h4,.map-info-rich p{margin:0}
+.map-info-rich h3{font:700 15px Georgia,"Times New Roman",serif;color:#ead8bd}
+.map-info-rich h4{font:700 11.5px Georgia,"Times New Roman",serif;color:#d8c3a3}
+.map-info-rich p{font-size:9px;line-height:1.55;color:#c9bba7;white-space:pre-wrap}
+.map-info-rich figure{margin:0;display:grid;gap:4px}
+.map-info-rich img,.map-info-rich video{display:block;max-width:100%;max-height:240px;margin:auto;border-radius:8px;object-fit:contain;background:#0c1015}
+.map-info-rich figcaption{text-align:center;color:#9f8d74;font-size:7.8px}
+
+.compact-node-help{display:flex;flex-direction:column;gap:3px;margin-top:7px;color:#9c896f;font-size:7.6px;line-height:1.35}
+.compact-node-help strong{color:#c9b493}
+
+/* La zona conserva claramente el color elegido sin tapar el mapa. */
+.zone-shape{fill-opacity:.14}
+
+/* ============================================================
+   A6.8.0 — selector de iconos, sliders y panel estable
+   ============================================================ */
+.point-icon-picker{
+  margin:8px 0 10px;
+  border:1px solid rgba(212,178,122,.12);
+  border-radius:8px;
+  background:rgba(20,24,30,.42);
+  overflow:visible;
+}
+.point-icon-picker>summary{
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-height:34px;
+  padding:7px 9px;
+  color:#c7b394;
+  cursor:pointer;
+}
+.point-icon-picker>summary::-webkit-details-marker{display:none}
+.point-icon-current{
+  display:grid;
+  place-items:center;
+  width:28px;height:28px;
+  border:1px solid rgba(212,178,122,.16);
+  border-radius:7px;
+  background:rgba(11,15,20,.76);
+  font-size:18px;
+  overflow:hidden;
+}
+.point-icon-current img{width:22px;height:22px;object-fit:contain}
+.point-icon-picker-body{
+  display:grid;
+  gap:8px;
+  padding:8px;
+  border-top:1px solid rgba(212,178,122,.10);
+}
+.point-icon-grid{
+  display:grid;
+  grid-template-columns:repeat(8,minmax(0,1fr));
+  gap:4px;
+  max-height:150px;
+  overflow:auto;
+  padding-right:2px;
+}
+.point-icon-grid button{
+  aspect-ratio:1/1;
+  min-width:0;
+  border:1px solid rgba(212,178,122,.10);
+  border-radius:6px;
+  background:rgba(31,35,43,.72);
+  color:#f0dfc2;
+  font-size:16px;
+  cursor:pointer;
+}
+.point-icon-grid button:hover{border-color:rgba(236,207,152,.38);background:rgba(75,57,80,.62)}
+.point-unicode-row{
+  display:grid;
+  grid-template-columns:96px minmax(0,1fr);
+  align-items:center;
+  gap:7px;
+  color:#a99577;
+  font-size:8px;
+}
+.point-icon-file-row{display:flex;gap:6px;flex-wrap:wrap}
+.map-point-image{pointer-events:none}
+
+.map-range-control{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 44px;
+  align-items:center;
+  gap:7px;
+  width:100%;
+}
+.map-range-control .map-range{
+  width:100%;
+  min-width:0;
+  padding:0;
+  border:0;
+  background:transparent;
+  accent-color:#b99561;
+}
+.map-range-control output{
+  display:block;
+  min-width:38px;
+  padding:4px 5px;
+  border:1px solid rgba(212,178,122,.11);
+  border-radius:6px;
+  background:rgba(10,14,18,.58);
+  color:#d8c5a7;
+  text-align:center;
+  font-size:8px;
+  font-variant-numeric:tabular-nums;
+}
+
+/* El selector vive dentro del panel, por lo que también permanece en fullscreen. */
+#characterTabPanel:fullscreen .point-icon-picker,
+.place-map-viewport.map-tab-mode .point-icon-picker{z-index:80}
+
+/* El scroll del panel no se reinicia visualmente al guardar cambios. */
+.map-side-panel-scroll{scroll-behavior:auto!important}
+
+@media(max-width:680px){
+  .point-icon-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .point-unicode-row{grid-template-columns:78px minmax(0,1fr)}
+}
+
+
+/* A6.8.1 — jerarquía de Lugares + artículo representado por elementos */
+.place-parent-toggle,
+.map-link-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  color:#b7a287;
+  font-size:8px;
+}
+.place-parent-toggle input,
+.map-link-toggle input{accent-color:#b99561}
+
+.infobox-entity-select{
+  width:100%;
+  margin-top:5px;
+  border:1px solid rgba(212,178,122,.14);
+  border-radius:6px;
+  background:#10151b;
+  color:#d7c7ae;
+  padding:5px 6px;
+  font-size:8px;
+}
+.infobox-entity-select:disabled{opacity:.42}
+
+.infobox-link-button{
+  display:block;
+  border:0;
+  padding:0;
+  margin:0 0 3px;
+  background:transparent;
+  color:#d7b576;
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.infobox-link-button:hover{text-decoration:underline}
+.place-children-links{display:grid;gap:2px}
+
+.map-element-article-link{
+  display:grid;
+  gap:6px;
+  margin:9px 0;
+  padding:8px;
+  border:1px solid rgba(212,178,122,.10);
+  border-radius:8px;
+  background:rgba(25,30,37,.42);
+}
+.map-element-article-link small{
+  color:#8f806c;
+  font-size:7.5px;
+}
+
+.map-open-article{
+  width:100%;
+  margin-top:10px;
+  border:1px solid rgba(212,178,122,.20);
+  border-radius:8px;
+  padding:8px 10px;
+  background:linear-gradient(180deg,rgba(72,56,78,.55),rgba(33,51,62,.50));
+  color:#efd7b1;
+  cursor:pointer;
+  text-align:left;
+}
+.map-open-article:hover{
+  border-color:rgba(236,207,152,.42);
+  background:linear-gradient(180deg,rgba(83,64,90,.68),rgba(39,60,72,.64));
+}
