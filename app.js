@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.7.1-unified-rich-flow";
+  const APP_BUILD = "A6.7.2-fixed-sidebar-editable-names";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function syncEditModeUI(){
@@ -950,6 +950,14 @@
     return `<div class="direct-edit ${cls}" contenteditable="true" spellcheck="true"
       data-edit-path="${esc(path)}" data-edit-type="${lines?"lines":"text"}"
       data-edit-empty="${esc(placeholder)}">${linkifyText(shown,e.id)}</div>`;
+  }
+
+  function renderEditableName(value,path,e,{cls="",placeholder="Sin nombre"}={}){
+    const raw=editableRaw(value);
+    const shown=raw || placeholder;
+    if(!editMode) return `<span class="direct-edit readonly entity-name-direct ${cls}">${esc(shown)}</span>`;
+    return `<span class="direct-edit entity-name-direct ${cls}" contenteditable="true" spellcheck="false"
+      data-edit-path="${esc(path)}" data-edit-type="text" data-edit-empty="${esc(placeholder)}">${esc(shown)}</span>`;
   }
 
   function wireDirectEditors(e){
@@ -2005,7 +2013,7 @@
     const validTabs=CHARACTER_TABS.map(x=>x[0]);let active=validTabs.includes(tab)?tab:"profile";
     $("#view").innerHTML=`<div class="character-page">
       <div class="page-head">${backButton()}<h1 class="page-title">Personajes</h1></div>
-      <header class="character-titlebar"><div class="character-title-copy"><h1>${esc(e.title)}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
+      <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
       <div class="character-wiki-layout">${renderCharacterInfobox(e)}<main class="character-article">
         <nav class="character-tabs" aria-label="Secciones del personaje">${CHARACTER_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-character-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
         <section id="characterTabPanel" class="character-tab-panel">${renderCharacterTab(e,active)}</section>
@@ -3039,7 +3047,9 @@
     const m=activePlaceMap(e);
     return `<div class="place-maps-shell">
       <div class="place-map-subtabs">${p.maps.map(x=>`<button class="place-map-subtab ${x.id===m.id?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`).join("")}${editMode?`<button class="place-map-subtab add edit-only" data-add-place-map>＋</button>`:""}</div>
-      <div class="place-map-head"><div><strong>${esc(m.title||"Mapa")}</strong><small>${esc(m.image?.name||"Sin imagen base")}</small></div>${editMode?`<button class="tiny-map-btn danger edit-only" data-remove-place-map="${m.id}">Quitar mapa</button>`:""}</div>
+      <div class="place-map-head"><div>${editMode
+        ? `<strong class="map-title-direct" contenteditable="true" spellcheck="false" data-map-title-edit>${esc(m.title||"Mapa")}</strong>`
+        : `<strong>${esc(m.title||"Mapa")}</strong>`}<small>${esc(m.image?.name||"Sin imagen base")}</small></div>${editMode?`<button class="tiny-map-btn danger edit-only" data-remove-place-map="${m.id}">Quitar mapa</button>`:""}</div>
       ${renderMapToolbar(m)}
       ${renderMapStage(m)}
       ${editMode?`<div class="map-panels-grid edit-only">
@@ -3260,6 +3270,14 @@
     $$('[data-map-zoom]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m),a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4,min=Math.min(a,b),max=Math.max(a,b);if(btn.dataset.mapZoom==='reset'){v.zoom=1;v.panX=0;v.panY=0}else if(btn.dataset.mapZoom==='in')v.zoom=Math.min(max,v.zoom*1.2);else v.zoom=Math.max(min,v.zoom/1.2);refreshPlaceTab(e)});
     wireMapStage(e,m);
     if(!editMode)return;
+    $('[data-map-title-edit]')?.addEventListener('blur',async ev=>{
+      const value=ev.currentTarget.innerText.replace(/\u00a0/g,' ').trim();
+      m.title=value||'Mapa';
+      await saveMapAndRefresh(e);
+    });
+    $('[data-map-title-edit]')?.addEventListener('keydown',ev=>{
+      if(ev.key==='Enter'){ev.preventDefault();ev.currentTarget.blur()}
+    });
     $$('[data-remove-place-map]').forEach(btn=>btn.onclick=async()=>{const p=placeData(e),idx=p.maps.findIndex(x=>x.id===btn.dataset.removePlaceMap);if(idx<0)return;if(!confirm('¿Quitar este mapa?'))return;p.maps.splice(idx,1);activePlaceMapId=p.maps[0]?.id||"";selectedPlaceMapElementId="";placeMapTool=null;await saveMapAndRefresh(e)});
     $$('[data-map-load-image]').forEach(btn=>btn.onclick=async()=>{const img=await chooseMapImage();if(!img)return;m.image=img;await saveMapAndRefresh(e)});
 
@@ -3351,7 +3369,7 @@
     if(active==='maps'){const m=activePlaceMap(e);if(m)activePlaceMapId=m.id}
     $("#view").innerHTML=`<div class="character-page place-page">
       <div class="page-head">${backButton()}<h1 class="page-title">Lugares</h1></div>
-      <header class="character-titlebar"><div class="character-title-copy"><h1>${esc(e.title)}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
+      <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div></header>
       <div class="character-wiki-layout">${renderPlaceInfobox(e)}<main class="character-article">
         <nav class="character-tabs" aria-label="Secciones del lugar">${PLACE_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-place-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
         <section id="characterTabPanel" class="character-tab-panel">${renderPlaceTab(e,active)}</section>
@@ -3718,7 +3736,7 @@
     buildNav();
     hydrateStaticIcons();
     syncEditModeUI();
-    restoreSidebar();
+    $("#app").classList.add("sidebar-collapsed");
     wireUndoKeys();
     window.addEventListener("resize",()=>{
       if(currentView.type==="entity" && document.querySelector(".character-page")) applyMediaRules();
@@ -3729,7 +3747,6 @@
 
     $("#brandHome").onclick=showHome;
     $("#editModeBtn").onclick=toggleEditMode;
-    $("#sidebarResizeBtn").onclick=e=>{e.stopPropagation();toggleSidebar()};
     $("#registryBtn").onclick=showRegistry;
     $("#linkerBtn").onclick=showLinker;
     $("#assetsBtn").onclick=showAssets;

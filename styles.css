@@ -1464,3 +1464,21 @@ body:not(.edit-mode) .media-drag-surface{display:none!important}
     margin:8px auto 13px!important;
   }
 }
+
+
+/* A6.7.2 — lateral fijo compacto + controles de edición discretos */
+#app{grid-template-columns:var(--sidebar-thin) minmax(0,1fr)!important}
+.home-resize{display:none!important}
+.edit-mode-toggle{
+  top:auto!important;bottom:14px!important;right:14px!important;
+  padding:6px 10px!important;font-size:8.5px!important;opacity:.78;
+}
+.edit-mode-toggle:hover,body.edit-mode .edit-mode-toggle{opacity:1}
+.entity-name-direct{display:inline;min-height:0;padding:0;margin:0;background:transparent}
+.entity-name-direct[contenteditable="true"]{cursor:text;border-radius:4px}
+.entity-name-direct[contenteditable="true"]:hover{background:rgba(212,178,122,.045)}
+.entity-name-direct[contenteditable="true"]:focus{background:rgba(212,178,122,.07);box-shadow:inset 0 -1px 0 rgba(236,207,152,.38);outline:none}
+.map-title-direct{display:inline-block;min-width:1ch;cursor:text;border-radius:4px;padding:1px 3px;margin:-1px -3px}
+.map-title-direct:hover{background:rgba(212,178,122,.05)}
+.map-title-direct:focus{background:rgba(212,178,122,.08);box-shadow:inset 0 -1px 0 rgba(236,207,152,.38);outline:none}
+@media(max-width:760px){.edit-mode-toggle{right:8px!important;bottom:8px!important;top:auto!important}}
