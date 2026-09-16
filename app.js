@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.7.4-places-maps-pass1";
+  const APP_BUILD = "A6.7.5-map-sidebar-unified-elements";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function editModeToggleMarkup(){
@@ -36,6 +36,7 @@
 
   function toggleEditMode(){
     editMode=!editMode;
+    activeMapInfoElementId="";
     localStorage.setItem("sethoria-edit-mode",editMode?"1":"0");
     syncEditModeUI();
     if(!editMode && currentView.type==="assets") showHome(); else rerenderCurrentView();
@@ -2060,6 +2061,7 @@
 
   let activePlaceMapId="";
   let selectedPlaceMapElementId="";
+  let activeMapInfoElementId="";
   let placeMapTool=null;
   const placeMapViews=new Map();
 
@@ -2192,6 +2194,7 @@
     m.settings.coordinates={...d.coordinates,...(m.settings.coordinates||{})};
     m.settings.calibration={...d.calibration,...(m.settings.calibration||{})};
     m.settings.calibration.controlPairs ||= [];
+    if(!["none","pixel","total","twoPoints"].includes(m.settings.calibration.method))m.settings.calibration.method="none";
     m.settings.units={...d.units,...(m.settings.units||{})};
     m.settings.precision={...d.precision,...(m.settings.precision||{})};
     m.settings.time={...d.time,...(m.settings.time||{})};
@@ -2206,8 +2209,34 @@
     m.generator.waypointIds ||= [];
     m.generator.avoidZoneIds ||= [];
     m.generator.preferredLineIds ||= [];
+
+    // A6.7.5: Línea deja de ser un cuarto tipo visible. Los datos antiguos se
+    // migran de forma compatible a Ruta > modo Línea, sin perder nodos ni estilo.
+    for(const el of m.elements){
+      if(el.kind==="line"){
+        el.kind="route";
+        el.routeMode="line";
+        el.category ||= "rutas";
+      }else if(el.kind==="route"){
+        el.routeMode ||= "route";
+      }
+      if(el.kind==="route"){
+        el.nodes ||= [];
+        el.routeMode ||= "route";
+        el.strokeType ||= "solid";
+        if(el.arrows===undefined)el.arrows=false;
+        el.smoothing=Number(el.smoothing)||0;
+        el.direction ||= el.routeMode==="line"?"none":"forward";
+        el.originPointId ||= "";
+        el.destinationPointId ||= "";
+        el.waypointPointIds ||= [];
+        el.segments ||= [];
+        el.media ||= [];
+      }
+    }
     return m;
   }
+
 
   async function chooseMapImage(){
     const file=await new Promise(resolve=>{
@@ -2240,7 +2269,7 @@
   function newMapElement(kind,nodes=[]){
     const common={
       id:mapUid(kind),
-      name:kind==="point"?"Nuevo punto":kind==="line"?"Nueva línea":kind==="zone"?"Nueva zona":"Nueva ruta",
+      name:kind==="point"?"Nuevo punto":kind==="zone"?"Nueva zona":"Nueva ruta",
       kind,
       category:kind==="route"?"rutas":"",
       layerIds:[],
@@ -2255,10 +2284,10 @@
       media:[]
     };
     if(kind==="point") return {...common,x:nodes[0]?.x??50,y:nodes[0]?.y??50,lat:"",lon:"",altitude:"",symbol:"",size:"",rotation:0,label:true,labelPosition:"top",labelOffsetX:0,labelOffsetY:0,radius:"",direction:""};
-    if(kind==="line") return {...common,nodes,closed:false,strokeType:"solid",direction:"none",arrows:false,realWidth:"",smoothing:0,nodeElevations:[]};
     if(kind==="zone") return {...common,nodes,holes:[],parts:[],fillOpacity:"",borderWidth:"",labelPoint:null,elevation:"",height:"",containerId:""};
-    return {...common,nodes,nodeLevels:nodes.map(()=>""),originPointId:"",destinationPointId:"",waypointPointIds:[],circular:false,direction:"forward",transport:"",segments:[],speedMode:"fixed",fixedSpeed:"",speedMin:"",speedMax:"",speedApprox:false,durationManual:"",departure:"",arrival:"",uncertainty:"",manualDistance:"",proposal:false,generation:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}};
+    return {...common,routeMode:"route",nodes,nodeLevels:nodes.map(()=>""),strokeType:"solid",arrows:false,smoothing:0,originPointId:"",destinationPointId:"",waypointPointIds:[],circular:false,direction:"forward",transport:"",segments:[],speedMode:"fixed",fixedSpeed:"",speedMin:"",speedMax:"",speedApprox:false,durationManual:"",departure:"",arrival:"",uncertainty:"",manualDistance:"",proposal:false,generation:{originPointId:"",destinationPointId:"",waypointIds:[],avoidZoneIds:[],preferredLineIds:[],criterion:"distancia"}};
   }
+
 
   const DIST_TO_M={mm:.001,cm:.01,m:1,km:1000,mi:1609.344,ft:.3048,nmi:1852};
   const SPEED_TO_MS={"m/s":1,"km/h":1000/3600,mph:1609.344/3600,kn:1852/3600,nudos:1852/3600};
@@ -2429,18 +2458,15 @@
         const from=Math.max(0,Math.min(nodes.length-2,Number(seg.fromIndex)||0));
         const to=Math.max(from+1,Math.min(nodes.length-1,Number(seg.toIndex)||nodes.length-1));
         const dist=polylineMeters(m,nodes.slice(from,to+1));
-        let speed=Number(seg.speed)||0;
-        if(!speed&&Number(seg.speedMin)>0&&Number(seg.speedMax)>0) speed=(Number(seg.speedMin)+Number(seg.speedMax))/2;
-        if(!speed) speed=Number(r.fixedSpeed)||Number(m.settings.routeDefaults.defaultSpeed)||0;
-        const factor=Number(seg.factor)||1;
-        const ms=speedToMs(speed*factor,speedUnit);
-        if(ms>0) total+=dist/ms;
+        const speed=Number(seg.speed)||Number(r.fixedSpeed)||0;
+        const ms=speedToMs(speed,speedUnit);
+        if(ms>0)total+=dist/ms;
         total+=timeToSeconds(seg.pauses,timeUnit);
       }
       return total;
     }
-    const speed=Number(r.fixedSpeed)||Number(m.settings.routeDefaults.defaultSpeed)||0;
-    const ms=speedToMs(speed,speedUnit);return ms>0?polylineMeters(m,nodes)/ms:0;
+    const speed=Number(r.fixedSpeed)||0,ms=speedToMs(speed,speedUnit);
+    return ms>0?polylineMeters(m,nodes)/ms:0;
   }
 
   function routeStats(m,r){
@@ -2471,52 +2497,30 @@
       const visibleLayers=new Set(m.layers.filter(l=>l.visible!==false).map(l=>l.id));
       if(!el.layerIds.some(id=>visibleLayers.has(id)))return false;
     }
-    const time=m.settings.time||{};
-    if(time.enabled&&time.reference){
-      const ref=Date.parse(time.reference);
-      if(Number.isFinite(ref)){
-        const from=Date.parse(el.dateFrom||"");const to=Date.parse(el.dateTo||"");
-        if(Number.isFinite(from)&&ref<from)return false;
-        if(Number.isFinite(to)&&ref>to)return false;
-      }
-    }
     return true;
   }
 
   function layerStyleFor(m,el){
     const layer=toArray(el.layerIds).map(id=>m.layers.find(x=>x.id===id)).find(Boolean);
-    return layer?{...(layer.style||{}),opacity:layer.opacity}:{};
+    return layer?{color:layer.style?.color||""}:{};
   }
 
   function mapElementStyle(m,el){
     const layer=layerStyleFor(m,el),own=el.style||{};
-    return {
-      color:own.color||layer.color||"#d4b27a",
-      opacity:own.opacity===""||own.opacity==null?(layer.opacity??1):Number(own.opacity),
-      width:Number(own.lineWidth)||Number(layer.lineWidth)||Number(m.settings.visual.lineWidth)||2,
-      dash:own.dash||layer.dash||"",
-      symbol:layer.symbol||""
-    };
+    return {color:own.color||layer.color||"#d4b27a",opacity:1,width:Number(own.lineWidth)||2,dash:own.dash||"",symbol:""};
   }
 
   function svgPoints(nodes){return toArray(nodes).map(p=>`${Number(p.x)||0},${Number(p.y)||0}`).join(" ")}
 
   function renderMapLabels(m,el,selected){
     if(el.kind==="point"&&el.label===false)return "";
-    const view=currentMapView(m);
-    if(view.zoom<Number(m.settings.visual.hideLabelsZoom||0))return "";
+    if(currentMapView(m).zoom<.45)return "";
     const name=el.name||"";if(!name)return "";
     let x=50,y=50;
-    if(el.kind==="point"){x=Number(el.x)||0;y=Number(el.y)||0}
-    else if(el.kind==="zone"&&el.labelPoint){x=Number(el.labelPoint.x)||50;y=Number(el.labelPoint.y)||50}
+    if(el.kind==="point"){x=Number(el.x)||0;y=(Number(el.y)||0)-2.1}
+    else if(el.kind==="zone"&&el.nodes?.length){x=el.nodes.reduce((a,p)=>a+Number(p.x),0)/el.nodes.length;y=el.nodes.reduce((a,p)=>a+Number(p.y),0)/el.nodes.length}
     else if(el.nodes?.length){x=el.nodes.reduce((a,p)=>a+Number(p.x),0)/el.nodes.length;y=el.nodes.reduce((a,p)=>a+Number(p.y),0)/el.nodes.length}
-    let px=Number(el.labelOffsetX)||0,py=Number(el.labelOffsetY)||0;
-    if(el.kind==="point"){
-      const pos=el.labelPosition||"top";
-      if(pos==="top")py-=2.1;else if(pos==="bottom")py+=3.1;else if(pos==="left")px-=3;else if(pos==="right")px+=3;
-    }
-    const fs=Math.max(1.2,(Number(m.settings.visual.labelSize)||12)*.15);
-    return `<text class="map-element-label ${selected?"selected":""}" style="font-size:${fs}px" x="${x+px}" y="${y+py}" data-map-element="${esc(el.id)}">${esc(name)}</text>`;
+    return `<text class="map-element-label ${selected?"selected":""}" style="font-size:1.8px" x="${x}" y="${y}" data-map-element="${esc(el.id)}">${esc(name)}</text>`;
   }
 
   function realRadiusPercent(m,value){
@@ -2526,41 +2530,43 @@
   }
 
   function routeNodesForCalc(r){
-    const nodes=toArray(r.nodes).map(p=>({...p}));
-    if(r.circular&&nodes.length>1)nodes.push({...nodes[0]});
-    return nodes;
+    return toArray(r.nodes).map(p=>({...p}));
   }
 
   function renderMapElementSvg(m,el){
     if(!mapElementVisible(m,el))return "";
-    const s=mapElementStyle(m,el),selected=el.id===selectedPlaceMapElementId;
+    const s=mapElementStyle(m,el);
+    const selectedId=editMode?selectedPlaceMapElementId:activeMapInfoElementId;
+    const selected=el.id===selectedId;
     let dash=s.dash||"";
-    if(el.kind==="line"&&!dash){if(el.strokeType==="dashed")dash="2 1.3";else if(el.strokeType==="dotted")dash=".35 1"}
+    if(el.kind==="route"&&(el.routeMode||"route")==="line"&&!dash){if(el.strokeType==="dashed")dash="2 1.3";else if(el.strokeType==="dotted")dash=".35 1"}
     const dashAttr=dash?`stroke-dasharray="${esc(dash)}"`:"";
     const common=`data-map-element="${esc(el.id)}" opacity="${s.opacity}"`;
     let shape="";
     if(el.kind==="point"){
-      const size=Number(el.size)||Number(m.settings.visual.markerSize)||12;
+      const size=Number(el.size)||12;
       const r=Math.max(.45,Math.min(3.2,size*.075));
-      const radius=Number(el.radius)>0?realRadiusPercent(m,el.radius):0;
-      const dir=Number(el.direction);
-      const directionLine=Number.isFinite(dir)&&el.direction!==""?(()=>{const a=(dir-90)*Math.PI/180,len=r*3.4;return `<line x1="${el.x}" y1="${el.y}" x2="${Number(el.x)+Math.cos(a)*len}" y2="${Number(el.y)+Math.sin(a)*len}" stroke="${esc(s.color)}" stroke-width=".22" marker-end="url(#mapArrow)"/>`})():"";
-      const radiusShape=radius>0?`<circle cx="${el.x}" cy="${el.y}" r="${radius}" fill="${esc(s.color)}" fill-opacity=".08" stroke="${esc(s.color)}" stroke-width=".12" stroke-dasharray=".6 .5"/>`:"";
-      shape=`<g ${common} class="map-shape point-shape ${selected?"selected":""}" transform="rotate(${Number(el.rotation)||0} ${Number(el.x)||0} ${Number(el.y)||0})">${radiusShape}${directionLine}<circle cx="${Number(el.x)||0}" cy="${Number(el.y)||0}" r="${r}" fill="${esc(s.color)}" stroke="rgba(0,0,0,.55)" stroke-width=".3"/><text class="map-point-symbol" x="${Number(el.x)||0}" y="${(Number(el.y)||0)+.15}">${esc(el.symbol||s.symbol||"•")}</text></g>`;
-    }else if(el.kind==="line"){
-      let nodes=toArray(el.nodes);if(Number(el.smoothing)>0)nodes=smoothPolyline(nodes,Number(el.smoothing));
-      if(el.closed&&nodes.length>2)nodes=[...nodes,nodes[0]];
-      const arrows=el.arrows||el.direction!=="none";
-      let markers="";if(arrows){if(el.direction==="backward"||el.direction==="both")markers+=' marker-start="url(#mapArrow)"';if(el.direction==="forward"||el.direction==="both")markers+=' marker-end="url(#mapArrow)"'}
-      if(nodes.length>1)shape=`<polyline ${common} class="map-shape ${selected?"selected":""}" points="${svgPoints(nodes)}" fill="${el.closed?`${esc(s.color)}22`:"none"}" stroke="${esc(s.color)}" stroke-width="${Math.max(.18,s.width*.18)}" ${dashAttr}${markers}/>`;
+      shape=`<g ${common} class="map-shape point-shape ${selected?"selected":""}"><circle cx="${Number(el.x)||0}" cy="${Number(el.y)||0}" r="${r}" fill="${esc(s.color)}" stroke="rgba(0,0,0,.55)" stroke-width=".3"/><text class="map-point-symbol" x="${Number(el.x)||0}" y="${(Number(el.y)||0)+.15}">${esc(el.symbol||s.symbol||"•")}</text></g>`;
     }else if(el.kind==="zone"){
       const rings=[toArray(el.nodes),...toArray(el.parts),...toArray(el.holes)].filter(r=>r.length>2);
       const pathD=rings.map(r=>`M ${r.map(p=>`${Number(p.x)||0} ${Number(p.y)||0}`).join(" L ")} Z`).join(" ");
-      if(pathD)shape=`<path ${common} class="map-shape zone-shape ${selected?"selected":""}" d="${pathD}" fill="${esc(s.color)}" fill-rule="evenodd" clip-rule="evenodd" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):Number(m.settings.visual.zoneOpacity)||.22}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`;
+      if(pathD)shape=`<path ${common} class="map-shape zone-shape ${selected?"selected":""}" d="${pathD}" fill="${esc(s.color)}" fill-rule="evenodd" clip-rule="evenodd" fill-opacity="${el.fillOpacity!==""&&el.fillOpacity!=null?Number(el.fillOpacity):0.22}" stroke="${esc(s.color)}" stroke-width="${Math.max(.16,(Number(el.borderWidth)||s.width)*.16)}" ${dashAttr}/>`;
     }else if(el.kind==="route"){
-      let nodes=routeNodesForCalc(el);if(nodes.length>1){const markers=el.direction==="backward"?' marker-start="url(#mapArrow)"':el.direction==="both"?' marker-start="url(#mapArrow)" marker-end="url(#mapArrow)"':' marker-end="url(#mapArrow)"';shape=`<polyline ${common} class="map-shape route-shape ${selected?"selected":""} ${el.proposal?"proposal":""}" points="${svgPoints(nodes)}" fill="none" stroke="${esc(s.color)}" stroke-width="${Math.max(.22,s.width*.2)}" ${el.proposal?'stroke-dasharray="1.2 1"':dashAttr}${markers}/>`}
+      const lineMode=(el.routeMode||"route")==="line";
+      let nodes=lineMode?toArray(el.nodes):routeNodesForCalc(el);
+      if(lineMode&&Number(el.smoothing)>0)nodes=smoothPolyline(nodes,Number(el.smoothing));
+      if(nodes.length>1){
+        let markers="";
+        if(lineMode){
+          const arrows=el.arrows||el.direction!=="none";
+          if(arrows){if(el.direction==="backward"||el.direction==="both")markers+=' marker-start="url(#mapArrow)"';if(el.direction==="forward"||el.direction==="both")markers+=' marker-end="url(#mapArrow)"'}
+        }else{
+          markers=el.direction==="backward"?' marker-start="url(#mapArrow)"':el.direction==="both"?' marker-start="url(#mapArrow)" marker-end="url(#mapArrow)"':' marker-end="url(#mapArrow)"';
+        }
+        shape=`<polyline ${common} class="map-shape ${lineMode?"line-shape":"route-shape"} ${selected?"selected":""} ${!lineMode&&el.proposal?"proposal":""}" points="${svgPoints(nodes)}" fill="none" stroke="${esc(s.color)}" stroke-width="${Math.max(.2,s.width*.19)}" ${!lineMode&&el.proposal?'stroke-dasharray="1.2 1"':dashAttr}${markers}/>`;
+      }
     }
-    const handles=selected?renderMapHandles(el):"";
+    const handles=editMode&&selected?renderMapHandles(el):"";
     return `${shape}${renderMapLabels(m,el,selected)}${handles}`;
   }
 
@@ -2573,9 +2579,11 @@
 
 
   function currentMapView(m){
-    if(!placeMapViews.has(m.id)) placeMapViews.set(m.id,{zoom:1,panX:0,panY:0,displayMode:"normal",justPanned:false});
+    if(!placeMapViews.has(m.id)) placeMapViews.set(m.id,{zoom:1,panX:0,panY:0,displayMode:"normal",justPanned:false,panelCollapsed:false,openSections:{elements:true,selected:true,layers:false,global:false},routeCreateOpen:false,routeGeneratorOpen:false});
     const v=placeMapViews.get(m.id);
-    if(!v.displayMode) v.displayMode="normal";
+    if(!v.displayMode)v.displayMode="normal";
+    if(v.panelCollapsed===undefined)v.panelCollapsed=false;
+    v.openSections ||= {elements:true,selected:true,layers:false,global:false};
     return v;
   }
 
@@ -2584,46 +2592,90 @@
       const vals=toArray(el.layerIds).map(id=>m.layers.find(l=>l.id===id)).filter(Boolean).map(l=>Number(l.order)||0);
       return vals.length?Math.max(...vals):0;
     };
-    const ordered=m.elements.slice().sort((a,b)=>layerOrder(a)-layerOrder(b)||(Number(a.order)||0)-(Number(b.order)||0));
-    const view=currentMapView(m);
-    if(!m.settings.visual.cluster||view.zoom>=1)return ordered.map(el=>renderMapElementSvg(m,el)).join("");
-    const points=ordered.filter(el=>el.kind==="point"&&mapElementVisible(m,el)&&el.id!==selectedPlaceMapElementId);
-    const others=ordered.filter(el=>el.kind!=="point"||el.id===selectedPlaceMapElementId);
-    const groups=[];
-    for(const p of points){let g=groups.find(g=>Math.hypot(g.x-p.x,g.y-p.y)<4.5);if(!g){g={x:Number(p.x),y:Number(p.y),items:[]};groups.push(g)}g.items.push(p);g.x=g.items.reduce((a,x)=>a+Number(x.x),0)/g.items.length;g.y=g.items.reduce((a,x)=>a+Number(x.y),0)/g.items.length}
-    const clusters=groups.map(g=>g.items.length===1?renderMapElementSvg(m,g.items[0]):`<g class="map-cluster"><circle cx="${g.x}" cy="${g.y}" r="2.2"/><text x="${g.x}" y="${g.y+.25}">${g.items.length}</text></g>`).join("");
-    return others.map(el=>renderMapElementSvg(m,el)).join("")+clusters;
+    return m.elements.slice().sort((a,b)=>layerOrder(a)-layerOrder(b)).map(el=>renderMapElementSvg(m,el)).join("");
   }
 
-
-  function renderMapStage(m){
-    const img=m.image;
-    if(!img?.src){
-      return `<div class="place-map-empty"><div>${icon("lugares")}</div><p>Sin imagen base.</p><button class="map-action" data-map-load-image>＋ Cargar imagen base</button></div>`;
+  function mapElementHasInfo(m,el){
+    if(!el)return false;
+    const hasText=String(el.note||"").trim().length>0;
+    const hasMedia=toArray(el.media).length>0;
+    const hasLink=!!el.targetId;
+    const hasCategory=!!String(el.category||"").trim()&&!(el.kind==="route"&&el.category==="rutas");
+    const meaningfulName=!!String(el.name||"").trim()&&!/^Nuev[oa] (punto|zona|ruta|línea)$/i.test(String(el.name||""));
+    if(el.kind==="route"&&(el.routeMode||"route")==="route"){
+      const travel=!!(el.transport||el.fixedSpeed||el.durationManual||el.departure||el.arrival||el.originPointId||el.destinationPointId);
+      return hasText||hasMedia||hasLink||hasCategory||meaningfulName||travel;
     }
+    return hasText||hasMedia||hasLink||hasCategory||meaningfulName;
+  }
 
-    const ratio=(Number(img.width)>0&&Number(img.height)>0)?`${img.width}/${img.height}`:"16/9";
-    const rot=((Number(m.settings.rotation)||0)%360+360)%360;
-    const baseScale=Math.max(.5,Math.min(2,Number(m.settings.baseScale)||1));
-    const mirrorX=m.settings.mirrorX?-1:1;
-    const els=renderMapElementsSvg(m);
-    const view=currentMapView(m);
-    const mapTransform=`translate(50 50) rotate(${rot}) scale(${mirrorX*baseScale} ${baseScale}) translate(-50 -50)`;
-    const tabClass=view.displayMode==="tab"?" map-tab-mode":"";
-
-    return `<div class="place-map-viewport${tabClass}" data-map-viewport>
-      <div class="place-map-canvas" data-map-canvas style="aspect-ratio:${ratio};transform:translate(${view.panX}px,${view.panY}px) scale(${view.zoom})">
-        <svg class="place-map-svg" data-map-stage viewBox="0 0 100 100" preserveAspectRatio="none">
-          <defs><marker id="mapArrow" markerWidth="4" markerHeight="4" refX="3.2" refY="2" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/></marker></defs>
-          <g class="map-content-transform" transform="${mapTransform}">
-            <image href="${esc(img.src)}" x="0" y="0" width="100" height="100" preserveAspectRatio="none" opacity="${Number(m.settings.baseOpacity)??1}"/>
-            <g class="map-elements-layer">${els}</g>
-            ${placeMapTool?.mapId===m.id&&toArray(placeMapTool.nodes).length?renderToolPreview(m):""}
-          </g>
-          <g class="map-north" transform="translate(93 8) rotate(${Number(m.settings.northAngle)||0})"><path d="M0 4 L0 -4"/><path d="M0 -4 L-1.2 -1.5 L1.2 -1.5 Z"/><text x="0" y="-5">N</text></g>
-        </svg>
+  function renderMapInfoPanel(e,m){
+    if(editMode)return "";
+    const el=placeMapElement(m,activeMapInfoElementId);
+    if(!el||!mapElementHasInfo(m,el))return "";
+    const target=entities.find(x=>x.id===el.targetId);
+    const type=el.kind==="point"?"Punto":el.kind==="zone"?"Zona":((el.routeMode||"route")==="line"?"Línea":"Ruta");
+    let derived="";
+    if(el.kind==="zone")derived=`<div class="map-info-facts"><span>Área <strong>${formatArea(zoneAreaMeters2(m,el),m)}</strong></span><span>Perímetro <strong>${formatDistance(zonePerimeterMeters(m,el),m)}</strong></span></div>`;
+    else if(el.kind==="route"&&(el.routeMode||"route")==="line")derived=`<div class="map-info-facts"><span>Longitud <strong>${formatDistance(polylineMeters(m,el.nodes),m)}</strong></span></div>`;
+    else if(el.kind==="route"){
+      const stats=routeStats(m,el),timeUnit=m.settings.units.time||"h";
+      derived=`<div class="map-info-facts"><span>Distancia <strong>${formatDistance(stats.meters,m)}</strong></span>${stats.seconds?`<span>Duración <strong>${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}</strong></span>`:""}${el.transport?`<span>Transporte <strong>${esc(el.transport)}</strong></span>`:""}</div>`;
+    }
+    return `<aside class="map-side-panel map-info-panel" data-map-info-panel>
+      <div class="map-side-panel-head"><div><small>${esc(type)}</small><strong>${esc(el.name||type)}</strong></div><button class="map-panel-close" data-close-map-info>×</button></div>
+      <div class="map-side-panel-scroll">
+        ${el.category&&!(el.kind==="route"&&el.category==="rutas")?`<div class="map-info-category">${esc(categoryName(el.category)||el.category)}</div>`:""}
+        ${target?`<button class="map-info-link" data-open-related="${target.id}">${esc(target.title)}</button>`:""}
+        ${el.note?`<div class="map-info-text">${linkifyText(el.note,e.id)}</div>`:""}
+        ${derived}
+        ${toArray(el.media).length?`<div class="map-info-media">${el.media.map(item=>`<figure>${renderMediaElement(item)}${item.caption?`<figcaption>${esc(item.caption)}</figcaption>`:""}</figure>`).join("")}</div>`:""}
       </div>
-      ${renderMapBottomControls(m)}
+    </aside>`;
+  }
+
+  function renderMapEditSidebar(e,m){
+    if(!editMode)return "";
+    const view=currentMapView(m);
+    return `<aside class="map-side-panel map-edit-panel ${view.panelCollapsed?"collapsed":""}" data-map-side-panel>
+      <button class="map-panel-collapse" data-map-panel-collapse title="${view.panelCollapsed?"Abrir panel":"Reducir panel"}">${view.panelCollapsed?"›":"‹"}</button>
+      <div class="map-side-panel-scroll">
+        ${renderMapElementList(m)}
+        ${renderSelectedElementInspector(e,m)}
+        ${renderMapLayers(m)}
+        ${renderMapGlobalSettings(m)}
+      </div>
+    </aside>`;
+  }
+
+  function renderMapStage(e,m){
+    const img=m.image;
+    const view=currentMapView(m);
+    const tabClass=view.displayMode==="tab"?" map-tab-mode":"";
+    const side=editMode?renderMapEditSidebar(e,m):renderMapInfoPanel(e,m);
+    if(!img?.src){
+      return `<div class="place-map-viewport${tabClass}" data-map-viewport><div class="place-map-workspace ${side?"has-side-panel":""}">${side}<div class="place-map-main"><div class="place-map-empty"><div>${icon("lugares")}</div><p>Sin imagen base.</p>${editMode?`<button class="map-action" data-map-load-image>＋ Cargar imagen base</button>`:""}</div>${renderMapBottomControls(m)}</div></div></div>`;
+    }
+    const ratio=(Number(img.width)>0&&Number(img.height)>0)?`${img.width}/${img.height}`:"16/9";
+    const els=renderMapElementsSvg(m);
+    return `<div class="place-map-viewport${tabClass}" data-map-viewport>
+      <div class="place-map-workspace ${side?"has-side-panel":""}">
+        ${side}
+        <div class="place-map-main">
+          <div class="place-map-canvas" data-map-canvas style="aspect-ratio:${ratio};transform:translate(${view.panX}px,${view.panY}px) scale(${view.zoom})">
+            <svg class="place-map-svg" data-map-stage viewBox="0 0 100 100" preserveAspectRatio="none">
+              <defs><marker id="mapArrow" markerWidth="4" markerHeight="4" refX="3.2" refY="2" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/></marker></defs>
+              <g class="map-content-transform">
+                <image href="${esc(img.src)}" x="0" y="0" width="100" height="100" preserveAspectRatio="none" opacity="1"/>
+                <g class="map-elements-layer">${els}</g>
+                ${placeMapTool?.mapId===m.id&&toArray(placeMapTool.nodes).length?renderToolPreview(m):""}
+              </g>
+              <g class="map-north" transform="translate(93 8) rotate(${Number(m.settings.northAngle)||0})"><path d="M0 4 L0 -4"/><path d="M0 -4 L-1.2 -1.5 L1.2 -1.5 Z"/><text x="0" y="-5">N</text></g>
+            </svg>
+          </div>
+          ${renderMapBottomControls(m)}
+        </div>
+      </div>
     </div>`;
   }
 
@@ -2636,14 +2688,7 @@
 
 
   function inverseRotatedPoint(x,y,deg,m=null){
-    const cx=50,cy=50;
-    let dx=x-cx,dy=y-cy;
-    const a=-(Number(deg)||0)*Math.PI/180;
-    const rx=dx*Math.cos(a)-dy*Math.sin(a);
-    const ry=dx*Math.sin(a)+dy*Math.cos(a);
-    const scale=Math.max(.5,Math.min(2,Number(m?.settings?.baseScale)||1));
-    const mirror=m?.settings?.mirrorX?-1:1;
-    return {x:cx+(rx/(mirror*scale)),y:cy+(ry/scale)};
+    return {x,y};
   }
 
   function eventMapPoint(svg,ev,m){
@@ -2729,107 +2774,46 @@
 
   function renderCalibrationSettings(m){
     const c=m.settings.calibration;
+    const method=c.method||"pixel";
     return `<div class="map-settings-grid">
-      ${settingRow("Método",mapSelect("settings.calibration.method",c.method,[["pixel","Valor por píxel"],["total","Dimensión total"],["twoPoints","Dos puntos"],["axis","X/Y independientes"],["multi","Varios controles"]]))}
-      ${settingRow("Unidad de calibración",mapSelect("settings.calibration.unit",c.unit,["mm","cm","m","km","mi","ft","nmi"]))}
-      ${settingRow("Valor por píxel",mapInput("settings.calibration.pixelValue",c.pixelValue,{type:"number",step:"any"}))}
-      ${settingRow("Ancho total",mapInput("settings.calibration.totalWidth",c.totalWidth,{type:"number",step:"any"}))}
-      ${settingRow("Alto total",mapInput("settings.calibration.totalHeight",c.totalHeight,{type:"number",step:"any"}))}
-      ${settingRow("Escala X / px",mapInput("settings.calibration.scaleX",c.scaleX,{type:"number",step:"any"}))}
-      ${settingRow("Escala Y / px",mapInput("settings.calibration.scaleY",c.scaleY,{type:"number",step:"any"}))}
-      ${settingRow("Punto A",`<div class="inline-map-fields">${mapInput("settings.calibration.pointA.x",c.pointA?.x??"",{type:"number",step:"any",placeholder:"X %"})}${mapInput("settings.calibration.pointA.y",c.pointA?.y??"",{type:"number",step:"any",placeholder:"Y %"})}<button class="tiny-map-btn" data-pick-calibration="A">Elegir</button></div>`,true)}
-      ${settingRow("Punto B",`<div class="inline-map-fields">${mapInput("settings.calibration.pointB.x",c.pointB?.x??"",{type:"number",step:"any",placeholder:"X %"})}${mapInput("settings.calibration.pointB.y",c.pointB?.y??"",{type:"number",step:"any",placeholder:"Y %"})}<button class="tiny-map-btn" data-pick-calibration="B">Elegir</button></div>`,true)}
-      ${settingRow("Distancia A–B",mapInput("settings.calibration.pointDistance",c.pointDistance,{type:"number",step:"any"}))}
-    </div>
-    <div class="map-control-pairs">
-      <div class="map-mini-head"><strong>Controles múltiples</strong><button class="tiny-map-btn" data-add-control-pair>＋ Par</button></div>
-      ${c.controlPairs.length?c.controlPairs.map((p,i)=>`<div class="control-pair-row">
-        ${mapInput(`settings.calibration.controlPairs.${i}.x1`,p.x1,{type:"number",step:"any",placeholder:"X1"})}
-        ${mapInput(`settings.calibration.controlPairs.${i}.y1`,p.y1,{type:"number",step:"any",placeholder:"Y1"})}
-        ${mapInput(`settings.calibration.controlPairs.${i}.x2`,p.x2,{type:"number",step:"any",placeholder:"X2"})}
-        ${mapInput(`settings.calibration.controlPairs.${i}.y2`,p.y2,{type:"number",step:"any",placeholder:"Y2"})}
-        ${mapInput(`settings.calibration.controlPairs.${i}.distance`,p.distance,{type:"number",step:"any",placeholder:"Distancia"})}
-        <button class="tiny-map-btn danger" data-remove-control-pair="${i}">×</button>
-      </div>`).join(""):`<div class="empty small">Sin pares.</div>`}
+      ${settingRow("Método",mapSelect("settings.calibration.method",method,[["none","Sin calibrar"],["pixel","Valor por píxel"],["total","Dimensión conocida"],["twoPoints","Dos puntos"]]))}
+      ${method!=="none"?settingRow("Unidad",mapSelect("settings.calibration.unit",c.unit,["mm","cm","m","km","mi","ft","nmi"])):""}
+      ${method==="pixel"?settingRow("Valor por píxel",mapInput("settings.calibration.pixelValue",c.pixelValue,{type:"number",step:"any"})):""}
+      ${method==="total"?settingRow("Ancho real",mapInput("settings.calibration.totalWidth",c.totalWidth,{type:"number",step:"any"})):""}
+      ${method==="total"?settingRow("Alto real",mapInput("settings.calibration.totalHeight",c.totalHeight,{type:"number",step:"any"})):""}
+      ${method==="twoPoints"?settingRow("Punto A",`<div class="inline-map-fields"><span class="read-value">${c.pointA?`X ${fmtNumber(c.pointA.x,2)} · Y ${fmtNumber(c.pointA.y,2)}`:"—"}</span><button class="tiny-map-btn" data-pick-calibration="A">Elegir</button></div>`,true):""}
+      ${method==="twoPoints"?settingRow("Punto B",`<div class="inline-map-fields"><span class="read-value">${c.pointB?`X ${fmtNumber(c.pointB.x,2)} · Y ${fmtNumber(c.pointB.y,2)}`:"—"}</span><button class="tiny-map-btn" data-pick-calibration="B">Elegir</button></div>`,true):""}
+      ${method==="twoPoints"?settingRow("Distancia A–B",mapInput("settings.calibration.pointDistance",c.pointDistance,{type:"number",step:"any"})):""}
     </div>`;
   }
 
   function renderMapGlobalSettings(m){
     const s=m.settings,{sx,sy}=mapScaleXY(m);
     const distUnit=s.units.distance||"m";
-    return `<details class="map-config-panel"><summary>Configuración global</summary>
-      <div class="map-config-body">
-        <h4>Base</h4>
+    return `<details class="map-config-panel map-sidebar-section" data-map-panel-section="global" ${currentMapView(m).openSections.global?"open":""}><summary>Configuración global</summary>
+      <div class="map-config-body compact-map-config">
+        <h4>Mapa</h4>
         <div class="map-settings-grid">
-          ${settingRow("Nombre",mapInput("title",m.title))}
-          ${settingRow("Imagen base",`<div class="inline-map-fields"><button class="tiny-map-btn" data-map-load-image>Cambiar</button><button class="tiny-map-btn danger" data-map-remove-image>Quitar</button></div>`,true)}
+          ${settingRow("Imagen base",`<div class="inline-map-fields"><button class="tiny-map-btn" data-map-load-image>${m.image?.src?"Cambiar":"Cargar"}</button><button class="tiny-map-btn danger" data-map-remove-image ${m.image?.src?"":"disabled"}>Quitar</button></div>`,true)}
           ${settingRow("Dimensiones",`<span class="read-value">${m.image?.width||0} × ${m.image?.height||0} px</span>`)}
-          ${settingRow("Rotación",mapInput("settings.rotation",s.rotation,{type:"number",min:-360,max:360,step:90}))}
-          ${settingRow("Espejo",mapCheckbox("settings.mirrorX",s.mirrorX,"Horizontal"))}
-          ${settingRow("Tamaño base",mapInput("settings.baseScale",s.baseScale,{type:"range",min:.5,max:2,step:.05}))}
           ${settingRow("Norte",mapInput("settings.northAngle",s.northAngle,{type:"number",min:-360,max:360,step:1}))}
-          ${settingRow("Opacidad base",mapInput("settings.baseOpacity",s.baseOpacity,{type:"range",min:0.1,max:1,step:0.05}))}
         </div>
-
-        <h4>Coordenadas</h4>
-        <div class="map-settings-grid">
-          ${settingRow("Sistema",mapSelect("settings.coordinates.mode",s.coordinates.mode,[["relative","Internas relativas"],["geographic","Geográficas"],["custom","Personalizadas"]]))}
-          ${settingRow("Geográficas",mapCheckbox("settings.coordinates.geographic",s.coordinates.geographic,"Habilitadas"))}
-          ${settingRow("Origen X",mapInput("settings.coordinates.originX",s.coordinates.originX,{type:"number",step:"any"}))}
-          ${settingRow("Origen Y",mapInput("settings.coordinates.originY",s.coordinates.originY,{type:"number",step:"any"}))}
-          ${settingRow("Dirección X",mapSelect("settings.coordinates.xDirection",s.coordinates.xDirection,[["right","Derecha"],["left","Izquierda"]]))}
-          ${settingRow("Dirección Y",mapSelect("settings.coordinates.yDirection",s.coordinates.yDirection,[["down","Abajo"],["up","Arriba"]]))}
-        </div>
-
-        <h4>Calibración y escala</h4>
+        <h4>Escala</h4>
         ${renderCalibrationSettings(m)}
-        <div class="map-scale-result">Escala efectiva: ${sx?`${fmtNumber(mToDist(sx,distUnit),5)} ${distUnit}/px`:"sin calibrar"}${sy&&Math.abs(sy-sx)>1e-12?` · Y ${fmtNumber(mToDist(sy,distUnit),5)} ${distUnit}/px`:""}</div>
-
+        <div class="map-scale-result">${sx?`Escala: ${fmtNumber(mToDist(sx,distUnit),5)} ${distUnit}/px${sy&&Math.abs(sy-sx)>1e-12?` · Y ${fmtNumber(mToDist(sy,distUnit),5)} ${distUnit}/px`:""}`:"Sin calibrar"}</div>
         <h4>Unidades</h4>
         <div class="map-settings-grid">
           ${settingRow("Distancia",mapSelect("settings.units.distance",s.units.distance,["mm","cm","m","km","mi","ft","nmi"]))}
           ${settingRow("Área",mapSelect("settings.units.area",s.units.area,["m²","km²","ha","ft²"]))}
           ${settingRow("Velocidad",mapSelect("settings.units.speed",s.units.speed,["m/s","km/h","mph","kn"]))}
           ${settingRow("Tiempo",mapSelect("settings.units.time",s.units.time,["s","min","h","d"]))}
-          ${settingRow("Altitud",mapSelect("settings.units.altitude",s.units.altitude,["m","ft"]))}
         </div>
-
         <h4>Precisión</h4>
         <div class="map-settings-grid">
           ${settingRow("Nivel",mapSelect("settings.precision.mode",s.precision.mode,["Exacta","Buena","Aproximada","Muy aproximada"]))}
           ${settingRow("Tolerancia",mapInput("settings.precision.tolerance",s.precision.tolerance,{type:"number",step:"any"}))}
           ${settingRow("Tipo",mapSelect("settings.precision.toleranceType",s.precision.toleranceType,["%",distUnit]))}
         </div>
-
-        <h4>Tiempo</h4>
-        <div class="map-settings-grid">
-          ${settingRow("Filtro temporal",mapCheckbox("settings.time.enabled",s.time.enabled,"Activo"))}
-          ${settingRow("Referencia",mapInput("settings.time.reference",s.time.reference,{placeholder:"Fecha / periodo"}))}
-        </div>
-
-        <h4>Visualización</h4>
-        <div class="map-settings-grid">
-          ${settingRow("Marcador base",mapInput("settings.visual.markerSize",s.visual.markerSize,{type:"number",min:4,max:40,step:1}))}
-          ${settingRow("Etiqueta base",mapInput("settings.visual.labelSize",s.visual.labelSize,{type:"number",min:6,max:30,step:1}))}
-          ${settingRow("Ocultar etiquetas bajo zoom",mapInput("settings.visual.hideLabelsZoom",s.visual.hideLabelsZoom,{type:"number",min:.1,max:4,step:.1}))}
-          ${settingRow("Agrupar puntos",mapCheckbox("settings.visual.cluster",s.visual.cluster,"Activo"))}
-          ${settingRow("Grosor base",mapInput("settings.visual.lineWidth",s.visual.lineWidth,{type:"number",min:.5,max:12,step:.5}))}
-          ${settingRow("Opacidad de zonas",mapInput("settings.visual.zoneOpacity",s.visual.zoneOpacity,{type:"range",min:0,max:1,step:.05}))}
-          ${settingRow("Zoom mínimo",mapInput("settings.visual.zoomMin",s.visual.zoomMin,{type:"number",min:.1,max:10,step:.1}))}
-          ${settingRow("Zoom máximo",mapInput("settings.visual.zoomMax",s.visual.zoomMax,{type:"number",min:.2,max:20,step:.1}))}
-        </div>
-
-        <h4>Generación de rutas</h4>
-        <div class="map-settings-grid">
-          ${settingRow("Método",mapSelect("settings.routeDefaults.method",s.routeDefaults.method,[["direct","Directo"],["smooth","Suavizado"],["corridor","Preferir corredores"]]))}
-          ${settingRow("Suavizado",mapInput("settings.routeDefaults.smoothness",s.routeDefaults.smoothness,{type:"number",min:0,max:5,step:1}))}
-          ${settingRow("Densidad de puntos",mapInput("settings.routeDefaults.pointDensity",s.routeDefaults.pointDensity,{type:"number",min:2,max:100,step:1}))}
-          ${settingRow("Tolerancia",mapInput("settings.routeDefaults.tolerance",s.routeDefaults.tolerance,{type:"number",min:0,step:"any"}))}
-          ${settingRow("Obstáculos",mapCheckbox("settings.routeDefaults.respectObstacles",s.routeDefaults.respectObstacles,"Respetar"))}
-          ${settingRow("Velocidad predeterminada",mapInput("settings.routeDefaults.defaultSpeed",s.routeDefaults.defaultSpeed,{type:"number",step:"any"}))}
-          ${settingRow("Transporte predeterminado",mapInput("settings.routeDefaults.defaultTransport",s.routeDefaults.defaultTransport))}
-        </div>
-        ${renderLayerPreferenceChecks(m)}
       </div>
     </details>`;
   }
@@ -2842,16 +2826,12 @@
 
 
   function renderMapLayers(m){
-    return `<details class="map-config-panel"><summary>Capas</summary><div class="map-config-body">
+    return `<details class="map-config-panel map-sidebar-section" data-map-panel-section="layers" ${currentMapView(m).openSections.layers?"open":""}><summary>Capas</summary><div class="map-config-body compact-map-config">
       <div class="map-mini-head"><span></span><button class="tiny-map-btn" data-add-layer>＋ Capa</button></div>
-      ${m.layers.length?`<div class="map-table-list">${m.layers.map((l,i)=>`<div class="map-table-row layer-row">
+      ${m.layers.length?`<div class="map-table-list">${m.layers.map((l,i)=>`<div class="map-table-row layer-row compact-layer-row">
         ${mapInput(`layers.${i}.name`,l.name||"Capa")}
         ${mapInput(`layers.${i}.order`,l.order??i,{type:"number",step:1,placeholder:"Orden"})}
-        ${mapInput(`layers.${i}.opacity`,l.opacity??1,{type:"number",min:0,max:1,step:.05,placeholder:"Opacidad"})}
         <input class="map-color" type="color" data-map-path="layers.${i}.style.color" value="${esc(l.style?.color||"#d4b27a")}">
-        ${mapInput(`layers.${i}.style.lineWidth`,l.style?.lineWidth??"",{type:"number",step:.1,placeholder:"Grosor"})}
-        ${mapInput(`layers.${i}.style.dash`,l.style?.dash??"",{placeholder:"Trazo"})}
-        ${mapInput(`layers.${i}.style.symbol`,l.style?.symbol??"",{placeholder:"Símbolo"})}
         <label class="mini-check"><input type="checkbox" data-map-path="layers.${i}.visible" data-map-type="bool" ${l.visible!==false?"checked":""}> Visible</label>
         <button class="tiny-map-btn danger" data-remove-layer="${i}">×</button>
       </div>`).join("")}</div>`:`<div class="empty small">Sin capas.</div>`}
@@ -2859,10 +2839,25 @@
   }
 
   function renderMapElementList(m){
-    const labels={point:"Punto",line:"Línea",zone:"Zona",route:"Ruta"};
-    return `<details class="map-config-panel" open><summary>Elementos</summary><div class="map-config-body">
+    const labelFor=el=>el.kind==="point"?"Punto":el.kind==="zone"?"Zona":(el.routeMode||"route")==="line"?"Ruta · Línea":"Ruta";
+    const activeTool=placeMapTool?.mapId===m.id;
+    const needsFinish=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
+    const canDraw=!!m.image?.src&&!activeTool;
+    return `<details class="map-config-panel map-sidebar-section" data-map-panel-section="elements" ${currentMapView(m).openSections.elements?"open":""}><summary>Elementos</summary><div class="map-config-body compact-map-config">
+      <div class="map-element-create-row">
+        <button class="tiny-map-btn" data-draw-tool="point" ${canDraw?"":"disabled"}>＋ Punto</button>
+        <button class="tiny-map-btn" data-draw-tool="zone" ${canDraw?"":"disabled"}>＋ Zona</button>
+        <details class="map-route-create" ${currentMapView(m).routeCreateOpen?"open":""}><summary class="tiny-map-btn ${canDraw?"":"disabled-summary"}">＋ Ruta</summary>
+          <div class="map-route-create-menu">
+            <button class="tiny-map-btn" data-draw-tool="line" ${canDraw?"":"disabled"}>Dibujar línea</button>
+            <button class="tiny-map-btn" data-draw-tool="route" ${canDraw?"":"disabled"}>Ruta manual</button>
+            ${renderRouteGenerator(m)}
+          </div>
+        </details>
+      </div>
+      ${activeTool?`<div class="map-active-tool"><span>Herramienta activa</span>${needsFinish?`<button class="tiny-map-btn finish" data-finish-map-tool>Terminar</button>`:""}<button class="tiny-map-btn danger" data-cancel-map-tool>Cancelar</button></div>`:""}
       ${m.elements.length?`<div class="map-element-list">${m.elements.map(el=>`<div class="map-element-list-row ${el.id===selectedPlaceMapElementId?"active":""}">
-        <button class="map-element-open" data-select-map-element="${el.id}"><span>${esc(labels[el.kind]||el.kind)}</span><strong>${esc(el.name||"Sin nombre")}</strong></button>
+        <button class="map-element-open" data-select-map-element="${el.id}"><span>${esc(labelFor(el))}</span><strong>${esc(el.name||"Sin nombre")}</strong></button>
         <label class="mini-check"><input type="checkbox" data-element-visible="${el.id}" ${el.visible!==false?"checked":""}>◉</label>
         <button class="tiny-map-btn danger" data-delete-map-element="${el.id}">×</button>
       </div>`).join("")}</div>`:`<div class="empty small">Sin elementos.</div>`}
@@ -2870,146 +2865,105 @@
   }
 
   function renderCommonElementFields(m,el){
+    const i=m.elements.indexOf(el);
     return `<div class="map-settings-grid">
-      ${settingRow("Nombre",mapInput(`elements.${m.elements.indexOf(el)}.name`,el.name))}
-      ${settingRow("Geometría",`<span class="read-value">${esc(el.kind)}</span>`)}
-      ${settingRow("Categoría",`<input class="map-field" list="map-category-list" data-map-path="elements.${m.elements.indexOf(el)}.category" value="${esc(el.category||"")}"><datalist id="map-category-list">${[...categoryMap.entries()].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("")}</datalist>`)}
-      ${settingRow("Entidad vinculada",mapSelect(`elements.${m.elements.indexOf(el)}.targetId`,el.targetId||"",[["","—"],...entities.filter(x=>x.id!==currentView.id).map(x=>[x.id,`${x.title} [${categoryName(x.category)}]`])]))}
-      ${settingRow("Desde",mapInput(`elements.${m.elements.indexOf(el)}.dateFrom`,el.dateFrom||"",{placeholder:"Fecha / periodo"}))}
-      ${settingRow("Hasta",mapInput(`elements.${m.elements.indexOf(el)}.dateTo`,el.dateTo||"",{placeholder:"Fecha / periodo"}))}
-      ${settingRow("Orden",mapInput(`elements.${m.elements.indexOf(el)}.order`,el.order??0,{type:"number",step:1}))}
-      ${settingRow("Visible",mapCheckbox(`elements.${m.elements.indexOf(el)}.visible`,el.visible!==false,"Mostrar"))}
-      ${settingRow("Color",`<input class="map-color" type="color" data-map-path="elements.${m.elements.indexOf(el)}.style.color" value="${esc(el.style?.color||layerStyleFor(m,el).color||"#d4b27a")}">`)}
-      ${settingRow("Opacidad",mapInput(`elements.${m.elements.indexOf(el)}.style.opacity`,el.style?.opacity??"",{type:"number",min:0,max:1,step:.05,placeholder:"Capa/global"}))}
-      ${settingRow("Grosor",mapInput(`elements.${m.elements.indexOf(el)}.style.lineWidth`,el.style?.lineWidth??"",{type:"number",min:.1,max:30,step:.1}))}
-      ${settingRow("Trazo",mapInput(`elements.${m.elements.indexOf(el)}.style.dash`,el.style?.dash||"",{placeholder:"Ej. 3 2"}))}
+      ${settingRow("Nombre",mapInput(`elements.${i}.name`,el.name))}
+      ${settingRow("Categoría",`<input class="map-field" list="map-category-list" data-map-path="elements.${i}.category" value="${esc(el.category||"")}"><datalist id="map-category-list">${[...categoryMap.entries()].map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("")}</datalist>`)}
+      ${settingRow("Entidad vinculada",mapSelect(`elements.${i}.targetId`,el.targetId||"",[["","—"],...entities.filter(x=>x.id!==currentView.id).map(x=>[x.id,`${x.title} [${categoryName(x.category)}]`])]))}
+      ${settingRow("Visible",mapCheckbox(`elements.${i}.visible`,el.visible!==false,"Mostrar"))}
+      ${settingRow("Color",`<input class="map-color" type="color" data-map-path="elements.${i}.style.color" value="${esc(el.style?.color||layerStyleFor(m,el).color||"#d4b27a")}">`)}
     </div>
-    <div class="map-two-columns single-column-map-options">
-      <div><strong>Capas</strong><div class="map-check-list">${m.layers.length?m.layers.map(l=>`<label><input type="checkbox" data-element-layer="${el.id}" value="${l.id}" ${el.layerIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join(""):`<span>—</span>`}</div></div>
-    </div>
-    <label class="map-textarea-label"><span>Nota</span><textarea class="map-textarea" data-map-path="elements.${m.elements.indexOf(el)}.note">${esc(el.note||"")}</textarea></label>`;
+    <div class="single-column-map-options"><strong>Capas</strong><div class="map-check-list">${m.layers.length?m.layers.map(l=>`<label><input type="checkbox" data-element-layer="${el.id}" value="${l.id}" ${el.layerIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join(""):`<span>—</span>`}</div></div>
+    <label class="map-textarea-label"><span>Texto / explicación</span><textarea class="map-textarea" data-map-path="elements.${i}.note">${esc(el.note||"")}</textarea></label>`;
   }
 
   function renderNodeEditor(m,el){
-    if(!["line","zone","route"].includes(el.kind))return "";
-    const idx=m.elements.indexOf(el);
-    return `<div class="map-node-editor"><div class="map-mini-head"><strong>Nodos</strong><button class="tiny-map-btn" data-append-node="${el.id}">＋ Nodo</button></div>
-      ${toArray(el.nodes).map((n,i)=>`<div class="node-row">
-        ${mapInput(`elements.${idx}.nodes.${i}.x`,n.x,{type:"number",min:0,max:100,step:.01,placeholder:"X %"})}
-        ${mapInput(`elements.${idx}.nodes.${i}.y`,n.y,{type:"number",min:0,max:100,step:.01,placeholder:"Y %"})}
-        <button class="tiny-map-btn danger" data-remove-node="${i}" data-node-owner="${el.id}">×</button>
-      </div>`).join("")}
+    if(!["zone","route"].includes(el.kind))return "";
+    return `<div class="map-node-editor"><div class="map-mini-head"><strong>Nodos · ${toArray(el.nodes).length}</strong><button class="tiny-map-btn" data-append-node="${el.id}">＋ Nodo</button></div>
+      ${toArray(el.nodes).length?`<div class="compact-node-list">${toArray(el.nodes).map((n,i)=>`<span>N${i+1}<button class="tiny-map-btn danger" data-remove-node="${i}" data-node-owner="${el.id}">×</button></span>`).join("")}</div>`:`<div class="empty small">Sin nodos.</div>`}
     </div>`;
   }
 
   function renderPointSpecific(m,el){
-    const i=m.elements.indexOf(el),c=m.settings.coordinates||{};
-    const customX=(Number(c.originX)||0)+(c.xDirection==="left"?-1:1)*(Number(el.x)||0);
-    const customY=(Number(c.originY)||0)+(c.yDirection==="up"?-1:1)*(Number(el.y)||0);
-    const otherPoints=m.elements.filter(x=>x.kind==="point"&&x.id!==el.id);
-    return `<h4>Punto</h4><div class="derived-strip multi"><span>Internas <strong>X ${fmtNumber(el.x,2)}% · Y ${fmtNumber(el.y,2)}%</strong></span>${c.mode==="custom"?`<span>Personalizadas <strong>X ${fmtNumber(customX,2)} · Y ${fmtNumber(customY,2)}</strong></span>`:""}<span>Distancia a otro punto <select class="map-inline-select" data-point-distance-target="${el.id}"><option value="">—</option>${otherPoints.map(p=>`<option value="${p.id}">${esc(p.name||"Punto")}</option>`).join("")}</select> <strong data-point-distance-result>—</strong></span></div><div class="map-settings-grid">
-      ${settingRow("X %",mapInput(`elements.${i}.x`,el.x,{type:"number",min:0,max:100,step:.01}))}
-      ${settingRow("Y %",mapInput(`elements.${i}.y`,el.y,{type:"number",min:0,max:100,step:.01}))}
-      ${settingRow("Latitud",mapInput(`elements.${i}.lat`,el.lat,{type:"number",step:"any"}))}
-      ${settingRow("Longitud",mapInput(`elements.${i}.lon`,el.lon,{type:"number",step:"any"}))}
-      ${settingRow("Altitud",mapInput(`elements.${i}.altitude`,el.altitude,{type:"number",step:"any"}))}
-      ${settingRow("Símbolo",mapInput(`elements.${i}.symbol`,el.symbol||"",{placeholder:"Capa o •"}))}
-      ${settingRow("Tamaño",mapInput(`elements.${i}.size`,el.size,{type:"number",min:1,max:80,step:1}))}
-      ${settingRow("Rotación",mapInput(`elements.${i}.rotation`,el.rotation,{type:"number",min:-360,max:360,step:1}))}
-      ${settingRow("Etiqueta",mapCheckbox(`elements.${i}.label`,el.label!==false,"Mostrar"))}
-      ${settingRow("Posición etiqueta",mapSelect(`elements.${i}.labelPosition`,el.labelPosition,["top","bottom","left","right","auto"]))}
-      ${settingRow("Desplazamiento X",mapInput(`elements.${i}.labelOffsetX`,el.labelOffsetX,{type:"number",step:.1}))}
-      ${settingRow("Desplazamiento Y",mapInput(`elements.${i}.labelOffsetY`,el.labelOffsetY,{type:"number",step:.1}))}
-      ${settingRow("Radio visual",mapInput(`elements.${i}.radius`,el.radius,{type:"number",step:"any"}))}
-      ${settingRow("Dirección",mapInput(`elements.${i}.direction`,el.direction,{type:"number",min:0,max:360,step:1}))}
-    </div>`;
+    const i=m.elements.indexOf(el),otherPoints=m.elements.filter(x=>x.kind==="point"&&x.id!==el.id);
+    return `<h4>Punto</h4>
+      <div class="derived-strip multi">${mapScaleXY(m).sx?`<span>Distancia a otro punto <select class="map-inline-select" data-point-distance-target="${el.id}"><option value="">—</option>${otherPoints.map(p=>`<option value="${p.id}">${esc(p.name||"Punto")}</option>`).join("")}</select> <strong data-point-distance-result>—</strong></span>`:""}</div>
+      <div class="map-settings-grid">
+        ${settingRow("Símbolo",mapInput(`elements.${i}.symbol`,el.symbol||"",{placeholder:"•"}))}
+        ${settingRow("Tamaño",mapInput(`elements.${i}.size`,el.size,{type:"number",min:4,max:40,step:1}))}
+        ${settingRow("Etiqueta",mapCheckbox(`elements.${i}.label`,el.label!==false,"Mostrar nombre"))}
+      </div>`;
   }
 
   function renderLineSpecific(m,el){
-    const i=m.elements.indexOf(el),lineNodes=el.closed&&el.nodes?.length>2?[...el.nodes,el.nodes[0]]:el.nodes,meters=polylineMeters(m,lineNodes);
-    const elev=toArray(el.nodeElevations).map(Number).filter(Number.isFinite);const delta=elev.length>1?elev[elev.length-1]-elev[0]:null;
-    return `<h4>Línea</h4><div class="derived-strip multi"><span>Longitud <strong>${formatDistance(meters,m)}</strong></span>${delta!==null?`<span>Desnivel <strong>${fmtNumber(delta)} ${esc(m.settings.units.altitude||"m")}</strong></span>`:""}</div><div class="map-settings-grid">
-      ${settingRow("Cerrada",mapCheckbox(`elements.${i}.closed`,el.closed,"Sí"))}
-      ${settingRow("Tipo de trazo",mapSelect(`elements.${i}.strokeType`,el.strokeType,["solid","dashed","dotted"]))}
-      ${settingRow("Dirección",mapSelect(`elements.${i}.direction`,el.direction,[["none","Sin dirección"],["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
-      ${settingRow("Flechas",mapCheckbox(`elements.${i}.arrows`,el.arrows,"Mostrar"))}
-      ${settingRow("Anchura real",mapInput(`elements.${i}.realWidth`,el.realWidth,{type:"number",step:"any"}))}
-      ${settingRow("Suavizado",mapInput(`elements.${i}.smoothing`,el.smoothing,{type:"number",min:0,max:5,step:1}))}
-      ${settingRow("Elevaciones por nodo",mapInput(`elements.${i}.nodeElevations`,toArray(el.nodeElevations).join(", "),{placeholder:"0, 2, 5…"}))}
-    </div>${renderNodeEditor(m,el)}`;
+    const i=m.elements.indexOf(el),meters=polylineMeters(m,el.nodes);
+    return `<h4>Línea</h4>
+      <div class="derived-strip multi"><span>Longitud <strong>${formatDistance(meters,m)}</strong></span></div>
+      <div class="map-settings-grid">
+        ${settingRow("Trazo",mapSelect(`elements.${i}.strokeType`,el.strokeType||"solid",[["solid","Continuo"],["dashed","Discontinuo"],["dotted","Punteado"]]))}
+        ${settingRow("Grosor",mapInput(`elements.${i}.style.lineWidth`,el.style?.lineWidth??"",{type:"number",min:.5,max:12,step:.5}))}
+        ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,el.direction||"none",[["none","Sin dirección"],["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
+        ${settingRow("Flechas",mapCheckbox(`elements.${i}.arrows`,el.arrows,"Mostrar"))}
+      </div>
+      ${renderNodeEditor(m,el)}`;
   }
 
   function renderZoneSpecific(m,el){
     const i=m.elements.indexOf(el),area=zoneAreaMeters2(m,el),per=zonePerimeterMeters(m,el);
-    const inside=m.elements.filter(x=>{if(x.id===el.id)return false;if(x.kind==="point")return pointInZone({x:Number(x.x),y:Number(x.y)},el);if(x.kind==="line"||x.kind==="route")return polylineCrossesZone(x.nodes,el);if(x.kind==="zone")return toArray(x.nodes).some(p=>pointInZone(p,el));return false});
-    const contained=m.elements.filter(x=>x.kind==="zone"&&x.containerId===el.id);
-    const heightM=Number(el.height)>0?distToM(el.height,m.settings.units.altitude||"m"):0;
-    const volume=heightM?area*heightM:0;
-    return `<h4>Zona</h4><div class="derived-strip multi"><span>Área <strong>${formatArea(area,m)}</strong></span><span>Perímetro <strong>${formatDistance(per,m)}</strong></span><span>Elementos dentro <strong>${inside.length}</strong></span><span>Zonas contenidas <strong>${contained.length}</strong></span>${volume?`<span>Volumen aprox. <strong>${fmtNumber(volume)} m³</strong></span>`:""}</div>
+    return `<h4>Zona</h4>
+      <div class="derived-strip multi"><span>Área <strong>${formatArea(area,m)}</strong></span><span>Perímetro <strong>${formatDistance(per,m)}</strong></span></div>
       <div class="map-settings-grid">
-        ${settingRow("Opacidad relleno",mapInput(`elements.${i}.fillOpacity`,el.fillOpacity,{type:"number",min:0,max:1,step:.05}))}
-        ${settingRow("Borde",mapInput(`elements.${i}.borderWidth`,el.borderWidth,{type:"number",min:.1,max:30,step:.1}))}
-        ${settingRow("Etiqueta X",mapInput(`elements.${i}.labelPoint.x`,el.labelPoint?.x??"",{type:"number",min:0,max:100,step:.01}))}
-        ${settingRow("Etiqueta Y",mapInput(`elements.${i}.labelPoint.y`,el.labelPoint?.y??"",{type:"number",min:0,max:100,step:.01}))}
-        ${settingRow("Elevación",mapInput(`elements.${i}.elevation`,el.elevation,{type:"number",step:"any"}))}
-        ${settingRow("Altura",mapInput(`elements.${i}.height`,el.height,{type:"number",step:"any"}))}
-        ${settingRow("Zona contenedora",mapSelect(`elements.${i}.containerId`,el.containerId||"",[["","—"],...m.elements.filter(x=>x.kind==="zone"&&x.id!==el.id).map(z=>[z.id,z.name||"Zona"]) ]))}
+        ${settingRow("Opacidad",mapInput(`elements.${i}.fillOpacity`,el.fillOpacity,{type:"number",min:0,max:1,step:.05}))}
+        ${settingRow("Borde",mapInput(`elements.${i}.borderWidth`,el.borderWidth,{type:"number",min:.1,max:12,step:.1}))}
       </div>
-      <div class="zone-part-actions"><button class="tiny-map-btn" data-draw-zone-part="${el.id}">＋ Parte</button><button class="tiny-map-btn" data-draw-zone-hole="${el.id}">＋ Hueco</button><span>${toArray(el.parts).length} partes · ${toArray(el.holes).length} huecos</span></div>
-      ${renderNodeEditor(m,el)}`;
+      <details class="map-advanced-shape"><summary>Forma avanzada</summary><div class="zone-part-actions"><button class="tiny-map-btn" data-draw-zone-part="${el.id}">＋ Parte</button><button class="tiny-map-btn" data-draw-zone-hole="${el.id}">＋ Hueco</button><span>${toArray(el.parts).length} partes · ${toArray(el.holes).length} huecos</span></div>${renderNodeEditor(m,el)}</details>`;
   }
 
   function renderRouteSegments(m,r){
     const idx=m.elements.indexOf(r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
     return `<div class="route-segments"><div class="map-mini-head"><strong>Tramos</strong><button class="tiny-map-btn" data-add-route-segment="${r.id}">＋ Tramo</button></div>
-      ${r.segments.length?r.segments.map((s,i)=>`<div class="route-segment-card">
+      ${r.segments.length?r.segments.map((seg,i)=>`<div class="route-segment-card">
         <div class="route-segment-title"><strong>Tramo ${i+1}</strong><button class="tiny-map-btn danger" data-remove-route-segment="${i}" data-route-owner="${r.id}">×</button></div>
         <div class="map-settings-grid">
-          ${settingRow("Nodo inicial",mapInput(`elements.${idx}.segments.${i}.fromIndex`,s.fromIndex??0,{type:"number",min:0,step:1}))}
-          ${settingRow("Nodo final",mapInput(`elements.${idx}.segments.${i}.toIndex`,s.toIndex??Math.max(1,r.nodes.length-1),{type:"number",min:1,step:1}))}
-          ${settingRow("Transporte",mapInput(`elements.${idx}.segments.${i}.transport`,s.transport||""))}
-          ${settingRow(`Velocidad (${speedUnit})`,mapInput(`elements.${idx}.segments.${i}.speed`,s.speed||"",{type:"number",step:"any"}))}
-          ${settingRow("Velocidad mínima",mapInput(`elements.${idx}.segments.${i}.speedMin`,s.speedMin||"",{type:"number",step:"any"}))}
-          ${settingRow("Velocidad máxima",mapInput(`elements.${idx}.segments.${i}.speedMax`,s.speedMax||"",{type:"number",step:"any"}))}
-          ${settingRow("Aproximada",mapCheckbox(`elements.${idx}.segments.${i}.speedApprox`,s.speedApprox,"≈"))}
-          ${settingRow("Terreno",mapInput(`elements.${idx}.segments.${i}.terrain`,s.terrain||""))}
-          ${settingRow("Pendiente",mapInput(`elements.${idx}.segments.${i}.slope`,s.slope||""))}
-          ${settingRow(`Pausas (${timeUnit})`,mapInput(`elements.${idx}.segments.${i}.pauses`,s.pauses||"",{type:"number",step:"any"}))}
-          ${settingRow("Condición",mapInput(`elements.${idx}.segments.${i}.condition`,s.condition||""))}
-          ${settingRow("Factor",mapInput(`elements.${idx}.segments.${i}.factor`,s.factor??1,{type:"number",step:.05}))}
-          ${settingRow(`Duración manual (${timeUnit})`,mapInput(`elements.${idx}.segments.${i}.durationManual`,s.durationManual||"",{type:"number",step:"any"}))}
+          ${settingRow("Nodo inicial",mapInput(`elements.${idx}.segments.${i}.fromIndex`,seg.fromIndex??0,{type:"number",min:0,step:1}))}
+          ${settingRow("Nodo final",mapInput(`elements.${idx}.segments.${i}.toIndex`,seg.toIndex??Math.max(1,r.nodes.length-1),{type:"number",min:1,step:1}))}
+          ${settingRow("Transporte",mapInput(`elements.${idx}.segments.${i}.transport`,seg.transport||""))}
+          ${settingRow(`Velocidad (${speedUnit})`,mapInput(`elements.${idx}.segments.${i}.speed`,seg.speed||"",{type:"number",step:"any"}))}
+          ${settingRow(`Pausas (${timeUnit})`,mapInput(`elements.${idx}.segments.${i}.pauses`,seg.pauses||"",{type:"number",step:"any"}))}
+          ${settingRow("Condición",mapInput(`elements.${idx}.segments.${i}.condition`,seg.condition||""))}
+          ${settingRow(`Duración manual (${timeUnit})`,mapInput(`elements.${idx}.segments.${i}.durationManual`,seg.durationManual||"",{type:"number",step:"any"}))}
         </div>
       </div>`).join(""):`<div class="empty small">Sin tramos específicos.</div>`}
     </div>`;
   }
 
   function renderRouteSpecific(m,r){
-    const i=m.elements.indexOf(r),stats=routeStats(m,r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
-    const manualDist=Number(r.manualDistance)>0?`${fmtNumber(r.manualDistance)} ${m.settings.units.distance}`:"";
-    return `<h4>Ruta</h4>
-      <div class="derived-strip multi"><span>Distancia calculada <strong>${formatDistance(stats.meters,m)}</strong></span>${manualDist?`<span>Distancia manual <strong>${manualDist}</strong></span>`:""}<span>Duración calculada <strong>${stats.seconds?`${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}`:"—"}</strong></span>${stats.secondsMin&&stats.secondsMax?`<span>Rango por velocidad <strong>${fmtNumber(secondsToTime(stats.secondsMin,timeUnit))}–${fmtNumber(secondsToTime(stats.secondsMax,timeUnit))} ${timeUnit}</strong></span>`:""}${Number(r.durationManual)>0?`<span>Duración manual <strong>${fmtNumber(r.durationManual)} ${timeUnit}</strong></span>`:""}<span>Velocidad media <strong>${stats.avgUnit?`${fmtNumber(stats.avgUnit)} ${speedUnit}`:"—"}</strong></span>${stats.calculatedArrival?`<span>Llegada calculada <strong>${esc(stats.calculatedArrival)}</strong></span>`:""}</div>
-      ${stats.zones.length?`<div class="route-zones"><strong>Zonas atravesadas</strong>${stats.zones.map(z=>`<span>${esc(z.name)} · ≈${fmtNumber(z.ratio*100,1)}% · ${formatDistance(z.meters,m)}</span>`).join("")}</div>`:""}
+    const i=m.elements.indexOf(r);
+    const mode=r.routeMode||"route";
+    const modeControl=`<div class="route-mode-switch"><span>Modo</span>${mapSelect(`elements.${i}.routeMode`,mode,[["line","Línea"],["route","Ruta"]])}</div>`;
+    if(mode==="line") return `${modeControl}${renderLineSpecific(m,r)}`;
+
+    const stats=routeStats(m,r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
+    return `${modeControl}<h4>Ruta</h4>
+      <div class="derived-strip multi"><span>Distancia <strong>${formatDistance(stats.meters,m)}</strong></span><span>Duración calculada <strong>${stats.seconds?`${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}`:"—"}</strong></span>${stats.avgUnit?`<span>Velocidad media <strong>${fmtNumber(stats.avgUnit)} ${speedUnit}</strong></span>`:""}</div>
+      ${stats.zones.length?`<div class="route-zones"><strong>Zonas atravesadas</strong>${stats.zones.map(z=>`<span>${esc(z.name)} · ≈${fmtNumber(z.ratio*100,1)}%</span>`).join("")}</div>`:""}
       ${r.proposal?`<button class="map-action accept-route" data-accept-route="${r.id}">Aceptar propuesta</button>`:""}
       <div class="map-settings-grid">
-        ${settingRow("Origen",mapSelect(`elements.${i}.originPointId`,r.originPointId||"",[["","—"],...m.elements.filter(x=>x.kind==="point").map(p=>[p.id,p.name||"Punto"]) ]))}
-        ${settingRow("Destino",mapSelect(`elements.${i}.destinationPointId`,r.destinationPointId||"",[["","—"],...m.elements.filter(x=>x.kind==="point").map(p=>[p.id,p.name||"Punto"]) ]))}
-        ${settingRow("Circular",mapCheckbox(`elements.${i}.circular`,r.circular,"Sí"))}
-        ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,r.direction,[["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
-        ${settingRow("Transporte",mapInput(`elements.${i}.transport`,r.transport||m.settings.routeDefaults.defaultTransport||""))}
-        ${settingRow("Modo de velocidad",mapSelect(`elements.${i}.speedMode`,r.speedMode,[["fixed","Fija"],["interval","Intervalo"],["segments","Por tramo"],["knownTime","Tiempo conocido"]]))}
-        ${settingRow(`Velocidad fija (${speedUnit})`,mapInput(`elements.${i}.fixedSpeed`,r.fixedSpeed,{type:"number",step:"any"}))}
-        ${settingRow("Velocidad mínima",mapInput(`elements.${i}.speedMin`,r.speedMin,{type:"number",step:"any"}))}
-        ${settingRow("Velocidad máxima",mapInput(`elements.${i}.speedMax`,r.speedMax,{type:"number",step:"any"}))}
-        ${settingRow("Aproximada",mapCheckbox(`elements.${i}.speedApprox`,r.speedApprox,"≈"))}
+        ${settingRow("Origen",`<select class="map-field" data-map-path="elements.${i}.originPointId"><option value="">—</option>${m.elements.filter(x=>x.kind==="point").map(p=>`<option value="${p.id}" ${r.originPointId===p.id?"selected":""} ${r.destinationPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
+        ${settingRow("Destino",`<select class="map-field" data-map-path="elements.${i}.destinationPointId"><option value="">—</option>${m.elements.filter(x=>x.kind==="point").map(p=>`<option value="${p.id}" ${r.destinationPointId===p.id?"selected":""} ${r.originPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`) }
+        ${settingRow("Sentido",mapSelect(`elements.${i}.direction`,r.direction||"forward",[["forward","A → B"],["backward","B → A"],["both","Ambos"]]))}
+        ${settingRow("Transporte",mapInput(`elements.${i}.transport`,r.transport||""))}
+        ${settingRow("Velocidad",mapSelect(`elements.${i}.speedMode`,r.speedMode||"fixed",[["fixed","Fija"],["interval","Intervalo"],["segments","Por tramo"],["knownTime","Tiempo conocido"]]))}
+        ${(r.speedMode||"fixed")==="fixed"?settingRow(`Velocidad (${speedUnit})`,mapInput(`elements.${i}.fixedSpeed`,r.fixedSpeed,{type:"number",step:"any"})):""}
+        ${r.speedMode==="interval"?settingRow("Velocidad mínima",mapInput(`elements.${i}.speedMin`,r.speedMin,{type:"number",step:"any"})):""}
+        ${r.speedMode==="interval"?settingRow("Velocidad máxima",mapInput(`elements.${i}.speedMax`,r.speedMax,{type:"number",step:"any"})):""}
         ${settingRow(`Duración manual (${timeUnit})`,mapInput(`elements.${i}.durationManual`,r.durationManual,{type:"number",step:"any"}))}
         ${settingRow("Salida",mapInput(`elements.${i}.departure`,r.departure))}
         ${settingRow("Llegada",mapInput(`elements.${i}.arrival`,r.arrival))}
         ${settingRow("Incertidumbre",mapInput(`elements.${i}.uncertainty`,r.uncertainty))}
-        ${settingRow(`Distancia manual (${m.settings.units.distance})`,mapInput(`elements.${i}.manualDistance`,r.manualDistance,{type:"number",step:"any"}))}
       </div>
-      <div class="map-check-list route-waypoints"><strong>Waypoints vinculados</strong>${m.elements.filter(x=>x.kind==="point").map(p=>`<label><input type="checkbox" data-route-waypoint="${r.id}" value="${p.id}" ${r.waypointPointIds?.includes(p.id)?"checked":""}> ${esc(p.name||"Punto")}</label>`).join("")||"—"}</div>
-      <div class="route-regenerate"><strong>Regenerar sección</strong>${mapInput("__regenFrom",0,{type:"number",min:0,step:1,placeholder:"Desde nodo"})}${mapInput("__regenTo",Math.max(1,r.nodes.length-1),{type:"number",min:1,step:1,placeholder:"Hasta nodo"})}<button class="tiny-map-btn" data-regenerate-route-section="${r.id}">Regenerar</button></div>
-      ${renderRouteSegments(m,r)}
+      <div class="map-check-list route-waypoints"><strong>Waypoints</strong>${m.elements.filter(x=>x.kind==="point"&&x.id!==r.originPointId&&x.id!==r.destinationPointId).map(p=>`<label><input type="checkbox" data-route-waypoint="${r.id}" value="${p.id}" ${r.waypointPointIds?.includes(p.id)?"checked":""}> ${esc(p.name||"Punto")}</label>`).join("")||"—"}</div>
+      <details class="map-route-segments-details"><summary>Tramos</summary>${renderRouteSegments(m,r)}</details>
       ${renderNodeEditor(m,r)}`;
   }
 
@@ -3019,38 +2973,30 @@
   }
 
   function renderSelectedElementInspector(e,m){
-    const el=placeMapElement(m);if(!el)return `<details class="map-config-panel" open><summary>Elemento seleccionado</summary><div class="map-config-body"><div class="empty small">Selecciona un punto, línea, zona o ruta.</div></div></details>`;
-    return `<details class="map-config-panel" open><summary>Elemento seleccionado · ${esc(el.name||el.kind)}</summary><div class="map-config-body">
+    const el=placeMapElement(m);
+    if(!el)return `<details class="map-config-panel map-sidebar-section" data-map-panel-section="selected" ${currentMapView(m).openSections.selected?"open":""}><summary>Elemento seleccionado</summary><div class="map-config-body"><div class="empty small">Selecciona un punto, una zona o una ruta.</div></div></details>`;
+    return `<details class="map-config-panel map-sidebar-section" data-map-panel-section="selected" ${currentMapView(m).openSections.selected?"open":""}><summary>Elemento seleccionado · ${esc(el.name||el.kind)}</summary><div class="map-config-body">
       ${renderCommonElementFields(m,el)}
-      ${el.kind==="point"?renderPointSpecific(m,el):el.kind==="line"?renderLineSpecific(m,el):el.kind==="zone"?renderZoneSpecific(m,el):renderRouteSpecific(m,el)}
+      ${el.kind==="point"?renderPointSpecific(m,el):el.kind==="zone"?renderZoneSpecific(m,el):renderRouteSpecific(m,el)}
       ${renderElementMedia(m,el)}
     </div></details>`;
   }
 
-
   function renderRouteGenerator(m){
-    const g=m.generator,points=m.elements.filter(x=>x.kind==="point"),zones=m.elements.filter(x=>x.kind==="zone"),lines=m.elements.filter(x=>x.kind==="line");
-    const validOrigin=points.some(p=>p.id===g.originPointId);
-    const validDestination=points.some(p=>p.id===g.destinationPointId);
+    const g=m.generator,points=m.elements.filter(x=>x.kind==="point"),zones=m.elements.filter(x=>x.kind==="zone"),lines=m.elements.filter(x=>x.kind==="route"&&(x.routeMode||"route")==="line");
+    const validOrigin=points.some(p=>p.id===g.originPointId),validDestination=points.some(p=>p.id===g.destinationPointId);
     const samePoint=validOrigin&&validDestination&&g.originPointId===g.destinationPointId;
-    const canGenerate=points.length>=2&&validOrigin&&validDestination&&!samePoint;
-
-    return `<details class="map-config-panel"><summary>Generar ruta</summary><div class="map-config-body">
+    const toolBusy=placeMapTool?.mapId===m.id;
+    const canGenerate=!!m.image?.src&&!toolBusy&&points.length>=2&&validOrigin&&validDestination&&!samePoint;
+    return `<details class="map-route-generator-inline" ${currentMapView(m).routeGeneratorOpen?"open":""}><summary>Generar ruta</summary><div class="map-route-generator-body">
       <div class="map-settings-grid">
         ${settingRow("Origen",`<select class="map-field" data-generator-field="originPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.originPointId===p.id?"selected":""} ${g.destinationPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
         ${settingRow("Destino",`<select class="map-field" data-generator-field="destinationPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.destinationPointId===p.id?"selected":""} ${g.originPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
-        ${settingRow("Criterio",`<select class="map-field" data-generator-field="criterion"><option ${g.criterion==="distancia"?"selected":""}>distancia</option><option ${g.criterion==="tiempo"?"selected":""}>tiempo</option></select>`)}
       </div>
-      ${points.length<2?`<div class="map-condition-note">Necesitas al menos dos puntos distintos para generar una ruta.</div>`:""}
-      ${samePoint?`<div class="map-condition-note error">Origen y destino no pueden ser el mismo punto.</div>`:""}
-      <div class="map-three-columns">
-        <div><strong>Waypoints</strong><div class="map-check-list">${points.map(p=>{
-          const blocked=p.id===g.originPointId||p.id===g.destinationPointId;
-          return `<label class="${blocked?"disabled-option":""}"><input type="checkbox" data-generator-list="waypointIds" value="${p.id}" ${g.waypointIds.includes(p.id)?"checked":""} ${blocked?"disabled":""}> ${esc(p.name||"Punto")}</label>`;
-        }).join("")||"—"}</div></div>
-        <div><strong>Zonas a evitar</strong><div class="map-check-list">${zones.map(z=>`<label><input type="checkbox" data-generator-list="avoidZoneIds" value="${z.id}" ${g.avoidZoneIds.includes(z.id)?"checked":""}> ${esc(z.name||"Zona")}</label>`).join("")||"—"}</div></div>
-        <div><strong>Líneas preferidas</strong><div class="map-check-list">${lines.map(l=>`<label><input type="checkbox" data-generator-list="preferredLineIds" value="${l.id}" ${g.preferredLineIds.includes(l.id)?"checked":""}> ${esc(l.name||"Línea")}</label>`).join("")||"—"}</div></div>
-      </div>
+      ${points.length<2?`<div class="map-condition-note">Necesitas al menos dos puntos.</div>`:""}
+      <div class="map-check-list"><strong>Waypoints</strong>${points.map(p=>{const blocked=p.id===g.originPointId||p.id===g.destinationPointId;return `<label class="${blocked?"disabled-option":""}"><input type="checkbox" data-generator-list="waypointIds" value="${p.id}" ${g.waypointIds.includes(p.id)?"checked":""} ${blocked?"disabled":""}> ${esc(p.name||"Punto")}</label>`}).join("")||"—"}</div>
+      ${lines.length?`<div class="map-check-list"><strong>Líneas preferidas</strong>${lines.map(l=>`<label><input type="checkbox" data-generator-list="preferredLineIds" value="${l.id}" ${g.preferredLineIds.includes(l.id)?"checked":""}> ${esc(l.name||"Línea")}</label>`).join("")}</div>`:""}
+      ${zones.length?`<div class="map-check-list"><strong>Zonas a evitar</strong>${zones.map(z=>`<label><input type="checkbox" data-generator-list="avoidZoneIds" value="${z.id}" ${g.avoidZoneIds.includes(z.id)?"checked":""}> ${esc(z.name||"Zona")}</label>`).join("")}</div>`:""}
       <button class="map-action" data-generate-route ${canGenerate?"":"disabled"}>Generar propuesta</button>
     </div></details>`;
   }
@@ -3061,44 +3007,14 @@
 
 
   function renderMapBottomControls(m){
-    const activeTool=placeMapTool?.mapId===m.id;
-    const drawing=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
-    const baseScale=Math.round((Number(m.settings.baseScale)||1)*100);
-    const canDraw=!!m.image?.src && !activeTool;
-
-    return `<div class="map-bottom-controls" data-map-bottom-controls>
-      <div class="map-bottom-left">
-        ${editMode?`
-          <details class="map-control-menu">
-            <summary>Crear</summary>
-            <div class="map-control-menu-body">
-              <button class="map-compact-btn" data-draw-tool="point" ${canDraw?"":"disabled"}>Punto</button>
-              <button class="map-compact-btn" data-draw-tool="line" ${canDraw?"":"disabled"}>Línea</button>
-              <button class="map-compact-btn" data-draw-tool="zone" ${canDraw?"":"disabled"}>Zona</button>
-              <button class="map-compact-btn" data-draw-tool="route" ${canDraw?"":"disabled"}>Ruta manual</button>
-              ${!m.image?.src?`<small>Carga una imagen base para crear elementos.</small>`:""}
-              ${activeTool?`<small>Termina o cancela la herramienta activa antes de iniciar otra.</small>`:""}
-            </div>
-          </details>
-          ${drawing?`<button class="map-compact-btn finish" data-finish-map-tool>Terminar</button>`:""}
-          ${activeTool?`<button class="map-compact-btn cancel" data-cancel-map-tool>Cancelar</button>`:""}
-          <details class="map-image-menu">
-            <summary>Imagen</summary>
-            <div class="map-image-menu-body">
-              <button class="map-compact-btn" data-map-rotate-90 ${m.image?.src?"":"disabled"}>↻ 90°</button>
-              <button class="map-compact-btn ${m.settings.mirrorX?"active":""}" data-map-mirror ${m.image?.src?"":"disabled"}>Espejo</button>
-              <label class="map-base-scale-label"><span>Tamaño</span><input type="range" min="50" max="200" step="5" value="${baseScale}" data-map-base-scale ${m.image?.src?"":"disabled"}></label>
-              <button class="map-compact-btn" data-map-load-image>${m.image?.src?"Cambiar":"Cargar"}</button>
-              <button class="map-compact-btn danger" data-map-remove-image ${m.image?.src?"":"disabled"}>Quitar imagen</button>
-            </div>
-          </details>
-        `:""}
-      </div>
+    if(!m.image?.src)return "";
+    const view=currentMapView(m);
+    return `<div class="map-bottom-controls view-only" data-map-bottom-controls>
       <div class="map-bottom-right">
         <span class="map-bottom-group-label">Vista</span>
-        <button class="map-compact-btn" data-map-zoom="reset" ${m.image?.src?"":"disabled"}>100%</button>
-        <button class="map-compact-btn" data-map-view="tab" ${m.image?.src?"":"disabled"}>Pestaña</button>
-        <button class="map-compact-btn" data-map-view="fullscreen" ${m.image?.src?"":"disabled"}>Pantalla</button>
+        <button class="map-compact-btn" data-map-zoom="reset">100%</button>
+        ${view.displayMode!=="tab"?`<button class="map-compact-btn" data-map-view="tab">Pestaña</button>`:""}
+        <button class="map-compact-btn" data-map-view="fullscreen">Pantalla</button>
         <button class="map-compact-btn" data-map-view="normal">Normal</button>
       </div>
     </div>`;
@@ -3123,11 +3039,7 @@
         }).join("")}
         ${editMode?`<button class="place-map-subtab add edit-only" data-add-place-map>＋</button>`:""}
       </div>
-      ${renderMapStage(m)}
-      ${editMode?`<div class="map-panels-grid edit-only">
-        <div>${renderMapElementList(m)}${renderSelectedElementInspector(e,m)}</div>
-        <div>${renderMapLayers(m)}${renderRouteGenerator(m)}${renderMapGlobalSettings(m)}</div>
-      </div>`:""}
+      ${renderMapStage(e,m)}
     </div>`;
   }
 
@@ -3207,9 +3119,9 @@
     const minNodes=t.mode==="draw-zone"||t.mode==="zone-part"||t.mode==="zone-hole"?3:2;
     if(["draw-line","draw-zone","draw-route","zone-part","zone-hole"].includes(t.mode)&&t.nodes.length<minNodes){alert(`Faltan puntos: se necesitan al menos ${minNodes}.`);return}
     if(t.mode==="append-nodes"&&!t.nodes.length){placeMapTool=null;refreshPlaceTab(e);return}
-    if(t.mode==="draw-line"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("line",t.nodes));m.elements.push(el);selectedPlaceMapElementId=el.id}
+    if(t.mode==="draw-line"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("route",t.nodes));el.routeMode="line";el.name="Nueva línea";el.direction="none";m.elements.push(el);selectedPlaceMapElementId=el.id}
     else if(t.mode==="draw-zone"&&t.nodes.length>=3){const el=applyDefaultLevel(m,newMapElement("zone",t.nodes));m.elements.push(el);selectedPlaceMapElementId=el.id}
-    else if(t.mode==="draw-route"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("route",t.nodes));el.transport=m.settings.routeDefaults.defaultTransport||"";el.fixedSpeed=m.settings.routeDefaults.defaultSpeed||"";m.elements.push(el);selectedPlaceMapElementId=el.id}
+    else if(t.mode==="draw-route"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("route",t.nodes));el.routeMode="route";m.elements.push(el);selectedPlaceMapElementId=el.id}
     else if(t.mode==="append-nodes"&&t.targetId){const el=placeMapElement(m,t.targetId);if(el){el.nodes.push(...t.nodes);}}
     else if(t.mode==="zone-part"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.parts.push(t.nodes)}
     else if(t.mode==="zone-hole"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.holes.push(t.nodes)}
@@ -3267,27 +3179,20 @@
   }
 
   function generateRouteProposal(e,m){
-    const g=m.generator,d=m.settings.routeDefaults;
+    const g=m.generator;
     const origin=placeMapElement(m,g.originPointId),dest=placeMapElement(m,g.destinationPointId);
+    if(!m.image?.src){alert("Carga primero una imagen base.");return}
     if(!origin||origin.kind!=="point"||!dest||dest.kind!=="point"){alert("Elige un punto de origen y uno de destino.");return}
     if(origin.id===dest.id){alert("Origen y destino deben ser puntos distintos.");return}
     g.waypointIds=(g.waypointIds||[]).filter(id=>id!==origin.id&&id!==dest.id);
     let nodes=[{x:origin.x,y:origin.y}];
-    for(const id of g.waypointIds){const p=placeMapElement(m,id);if(p?.kind==="point")nodes.push({x:p.x,y:p.y})}
-    const preferredLayerSet=new Set(d.preferredLayerIds||[]);
-    const preferred=[...g.preferredLineIds.map(id=>placeMapElement(m,id)).filter(x=>x?.kind==="line")];
-    for(const line of m.elements.filter(x=>x.kind==="line"&&x.layerIds?.some(id=>preferredLayerSet.has(id))))if(!preferred.includes(line))preferred.push(line);
-    if((d.method==="corridor"||preferred.length)&&preferred.length){for(const line of preferred)nodes.push(...toArray(line.nodes).map(p=>({...p})))}
+    for(const id of g.waypointIds){const pt=placeMapElement(m,id);if(pt?.kind==="point")nodes.push({x:pt.x,y:pt.y})}
+    for(const id of g.preferredLineIds||[]){const line=placeMapElement(m,id);if(line?.kind==="route"&&(line.routeMode||"route")==="line")nodes.push(...toArray(line.nodes).map(p=>({...p})))}
     nodes.push({x:dest.x,y:dest.y});
-    const avoid=[...g.avoidZoneIds.map(id=>placeMapElement(m,id)).filter(x=>x?.kind==="zone")];
-    if(d.respectObstacles){
-      const restricted=new Set(d.restrictedLayerIds||[]);
-      for(const z of m.elements.filter(x=>x.kind==="zone"&&x.layerIds?.some(id=>restricted.has(id))))if(!avoid.includes(z))avoid.push(z);
-    }
-    if(avoid.length)nodes=detourAroundZones(nodes,avoid,Math.max(1,Number(d.tolerance)||2));
-    nodes=densifyPolyline(nodes,Math.max(nodes.length,Number(d.pointDensity)||nodes.length));
-    nodes=smoothPolyline(nodes,Number(d.smoothness)||0);
-    const r=applyDefaultLevel(m,newMapElement("route",nodes));r.name="Ruta propuesta";r.transport=d.defaultTransport||"";r.proposal=true;r.originPointId=origin.id;r.destinationPointId=dest.id;r.waypointPointIds=[...g.waypointIds];r.fixedSpeed=d.defaultSpeed;r.generation=JSON.parse(JSON.stringify(g));
+    const avoid=(g.avoidZoneIds||[]).map(id=>placeMapElement(m,id)).filter(x=>x?.kind==="zone");
+    if(avoid.length)nodes=detourAroundZones(nodes,avoid,2);
+    const r=newMapElement("route",nodes);
+    r.routeMode="route";r.name="Ruta propuesta";r.proposal=true;r.originPointId=origin.id;r.destinationPointId=dest.id;r.waypointPointIds=[...g.waypointIds];r.generation=JSON.parse(JSON.stringify(g));
     m.elements.push(r);selectedPlaceMapElementId=r.id;saveMapAndRefresh(e);
   }
 
@@ -3345,16 +3250,16 @@
       if(!m.image?.src)return;
       ev.preventDefault();
       const v=currentMapView(m);
-      const a=Number(m.settings.visual.zoomMin)||.5,b=Number(m.settings.visual.zoomMax)||4;
-      const min=Math.min(a,b),max=Math.max(a,b);
+      const min=.25,max=8;
       const old=v.zoom;
       const factor=ev.deltaY<0?1.12:(1/1.12);
       const next=Math.max(min,Math.min(max,old*factor));
       if(Math.abs(next-old)<1e-6)return;
 
-      const vr=viewport.getBoundingClientRect();
-      const localX=ev.clientX-vr.left-canvas.offsetLeft;
-      const localY=ev.clientY-vr.top-canvas.offsetTop;
+      const main=viewport.querySelector('.place-map-main');
+      const mr=(main||viewport).getBoundingClientRect();
+      const localX=ev.clientX-mr.left;
+      const localY=ev.clientY-mr.top;
       v.panX=localX-(localX-v.panX)*(next/old);
       v.panY=localY-(localY-v.panY)*(next/old);
       v.zoom=next;
@@ -3364,7 +3269,7 @@
     let pan=null;
     viewport.onpointerdown=ev=>{
       if(ev.button!==0)return;
-      if(ev.target.closest('[data-map-bottom-controls],.map-node-handle'))return;
+      if(ev.target.closest('[data-map-bottom-controls],[data-map-side-panel],.map-node-handle'))return;
       if(editMode&&placeMapTool?.mapId===m.id)return;
       const v=currentMapView(m);
       pan={id:ev.pointerId,startX:ev.clientX,startY:ev.clientY,panX:v.panX,panY:v.panY,moved:false};
@@ -3413,9 +3318,15 @@
         t.nodes.push(p);refreshPlaceTab(e);return;
       }
       const shape=ev.target.closest?.('[data-map-element]');
-      if(editMode&&shape&&!ev.target.classList.contains('map-node-handle')){
-        selectedPlaceMapElementId=shape.dataset.mapElement;refreshPlaceTab(e);return;
+      if(shape&&!ev.target.classList.contains('map-node-handle')){
+        if(editMode){
+          selectedPlaceMapElementId=shape.dataset.mapElement;activeMapInfoElementId="";refreshPlaceTab(e);return;
+        }
+        const el=placeMapElement(m,shape.dataset.mapElement);
+        activeMapInfoElementId=el&&mapElementHasInfo(m,el)?el.id:"";
+        refreshPlaceTab(e);return;
       }
+      if(!editMode&&activeMapInfoElementId){activeMapInfoElementId="";refreshPlaceTab(e);return}
     };
 
     let drag=null;
@@ -3432,56 +3343,28 @@
   }
 
   function wirePlaceMap(e,m){
-    $$('[data-place-map-tab]').forEach(btn=>btn.onclick=()=>{activePlaceMapId=btn.dataset.placeMapTab;selectedPlaceMapElementId="";placeMapTool=null;refreshPlaceTab(e)});
+    $$('[data-place-map-tab]').forEach(btn=>btn.onclick=()=>{activePlaceMapId=btn.dataset.placeMapTab;selectedPlaceMapElementId="";activeMapInfoElementId="";placeMapTool=null;refreshPlaceTab(e)});
     $$('[data-map-zoom="reset"]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m);v.zoom=1;v.panX=0;v.panY=0;applyMapCanvasView(m)});
     wireMapViewportNavigation(m);
     wireMapStage(e,m);
+    $('[data-map-panel-collapse]')?.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const v=currentMapView(m);v.panelCollapsed=!v.panelCollapsed;
+      const panel=$('[data-map-side-panel]'),workspace=$('.place-map-workspace');
+      panel?.classList.toggle('collapsed',v.panelCollapsed);
+      workspace?.classList.toggle('panel-collapsed',v.panelCollapsed);
+      ev.currentTarget.textContent=v.panelCollapsed?'›':'‹';
+      ev.currentTarget.title=v.panelCollapsed?'Abrir panel':'Reducir panel';
+    });
+    $('[data-close-map-info]')?.addEventListener('click',ev=>{ev.stopPropagation();activeMapInfoElementId="";refreshPlaceTab(e)});
     if(!editMode)return;
 
-    const mapMenus=[...document.querySelectorAll('.map-control-menu,.map-image-menu')];
-    mapMenus.forEach(menu=>menu.addEventListener('click',ev=>ev.stopPropagation()));
-    document.addEventListener('click',ev=>{
-      mapMenus.forEach(menu=>{if(menu.open&&!menu.contains(ev.target))menu.open=false});
-    },{once:true});
+    $$('[data-map-panel-section]').forEach(section=>section.addEventListener('toggle',()=>{
+      const key=section.dataset.mapPanelSection;if(key)currentMapView(m).openSections[key]=section.open;
+    }));
+    $('.map-route-create')?.addEventListener('toggle',ev=>{currentMapView(m).routeCreateOpen=ev.currentTarget.open});
+    $('.map-route-generator-inline')?.addEventListener('toggle',ev=>{currentMapView(m).routeGeneratorOpen=ev.currentTarget.open});
 
-    $('[data-map-rotate-90]')?.addEventListener('click',async ev=>{
-      ev.preventDefault();
-      m.settings.rotation=((Number(m.settings.rotation)||0)+90)%360;
-      const group=$('.map-content-transform');
-      if(group){
-        const scale=Math.max(.5,Math.min(2,Number(m.settings.baseScale)||1));
-        const mirror=m.settings.mirrorX?-1:1;
-        group.setAttribute('transform',`translate(50 50) rotate(${m.settings.rotation}) scale(${mirror*scale} ${scale}) translate(-50 -50)`);
-      }
-      await saveEntityDirect(e);
-    });
-    $('[data-map-mirror]')?.addEventListener('click',async ev=>{
-      ev.preventDefault();
-      m.settings.mirrorX=!m.settings.mirrorX;
-      ev.currentTarget.classList.toggle('active',m.settings.mirrorX);
-      const group=$('.map-content-transform');
-      if(group){
-        const rot=((Number(m.settings.rotation)||0)%360+360)%360;
-        const scale=Math.max(.5,Math.min(2,Number(m.settings.baseScale)||1));
-        const mirror=m.settings.mirrorX?-1:1;
-        group.setAttribute('transform',`translate(50 50) rotate(${rot}) scale(${mirror*scale} ${scale}) translate(-50 -50)`);
-      }
-      await saveEntityDirect(e);
-    });
-    $('[data-map-base-scale]')?.addEventListener('input',ev=>{
-      const value=Math.max(50,Math.min(200,Number(ev.currentTarget.value)||100))/100;
-      m.settings.baseScale=value;
-      const group=$('.map-content-transform');
-      if(group){
-        const rot=((Number(m.settings.rotation)||0)%360+360)%360;
-        const mirror=m.settings.mirrorX?-1:1;
-        group.setAttribute('transform',`translate(50 50) rotate(${rot}) scale(${mirror*value} ${value}) translate(-50 -50)`);
-      }
-    });
-    $('[data-map-base-scale]')?.addEventListener('change',async ev=>{
-      m.settings.baseScale=Math.max(50,Math.min(200,Number(ev.currentTarget.value)||100))/100;
-      await saveEntityDirect(e);
-    });
     $('[data-map-title-edit]')?.addEventListener('blur',async ev=>{
       const value=ev.currentTarget.innerText.replace(/\u00a0/g,' ').trim();
       m.title=value||'Mapa';
@@ -3504,7 +3387,24 @@
         const path=input.dataset.mapPath;if(path.startsWith('__'))return;
         let value=parseMapInputValue(input);
         if(path.endsWith('nodeElevations')&&typeof value==='string')value=value.split(',').map(x=>Number(x.trim())).filter(Number.isFinite);
-        setMapPath(m,path,value);await saveMapAndRefresh(e);
+        setMapPath(m,path,value);
+        if(path.endsWith('.routeMode')){
+          const idx=Number(path.split('.')[1]),route=m.elements[idx];
+          if(route){
+            if(value==='line'&&(route.direction==='forward'||!route.direction))route.direction='none';
+            if(value==='route'&&route.direction==='none')route.direction='forward';
+          }
+        }
+        if(path.endsWith('.originPointId')||path.endsWith('.destinationPointId')){
+          const idx=Number(path.split('.')[1]),route=m.elements[idx];
+          if(route){
+            if(route.originPointId&&route.originPointId===route.destinationPointId){
+              if(path.endsWith('.originPointId'))route.destinationPointId='';else route.originPointId='';
+            }
+            route.waypointPointIds=(route.waypointPointIds||[]).filter(id=>id!==route.originPointId&&id!==route.destinationPointId);
+          }
+        }
+        await saveMapAndRefresh(e);
       };
       input.onchange=handler;
     });
@@ -3535,7 +3435,7 @@
     $$('[data-draw-zone-part]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'zone-part',mapId:m.id,targetId:btn.dataset.drawZonePart,nodes:[]};refreshPlaceTab(e)});
     $$('[data-draw-zone-hole]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'zone-hole',mapId:m.id,targetId:btn.dataset.drawZoneHole,nodes:[]};refreshPlaceTab(e)});
 
-    $$('[data-add-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.addRouteSegment);if(!r)return;r.segments.push({fromIndex:0,toIndex:Math.max(1,r.nodes.length-1),transport:m.settings.routeDefaults.defaultTransport||'',speed:m.settings.routeDefaults.defaultSpeed||'',speedMin:'',speedMax:'',speedApprox:false,terrain:'',slope:'',pauses:'',condition:'',factor:1,durationManual:''});await saveMapAndRefresh(e)});
+    $$('[data-add-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.addRouteSegment);if(!r)return;r.segments.push({fromIndex:0,toIndex:Math.max(1,r.nodes.length-1),transport:'',speed:'',speedMin:'',speedMax:'',speedApprox:false,terrain:'',slope:'',pauses:'',condition:'',factor:1,durationManual:''});await saveMapAndRefresh(e)});
     $$('[data-remove-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.routeOwner);if(!r)return;r.segments.splice(Number(btn.dataset.removeRouteSegment),1);await saveMapAndRefresh(e)});
     $$('[data-accept-route]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.acceptRoute);if(!r)return;r.proposal=false;if(r.name==='Ruta propuesta')r.name='Ruta';await saveMapAndRefresh(e)});
     $$('[data-regenerate-route-section]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.regenerateRouteSection);if(!r)return;const wrap=btn.closest('.route-regenerate'),inputs=wrap.querySelectorAll('[data-map-path^="__regen"]');const from=Math.max(0,Number(inputs[0]?.value)||0),to=Math.min(r.nodes.length-1,Number(inputs[1]?.value)||r.nodes.length-1);if(to<=from)return;let repl=densifyPolyline([r.nodes[from],r.nodes[to]],Math.max(2,Number(m.settings.routeDefaults.pointDensity)||2));repl=smoothPolyline(repl,Number(m.settings.routeDefaults.smoothness)||0);r.nodes.splice(from,to-from+1,...repl);await saveMapAndRefresh(e)});
@@ -3600,7 +3500,7 @@
     wireEditModeToggles();
     $('[data-change-cover="place"]')?.addEventListener('click',()=>choosePortrait(e,()=>showPlaceEntity(e,active)));
     $('[data-remove-cover="place"]')?.addEventListener('click',async()=>{e.image="";await saveEntityDirect(e);showPlaceEntity(e,active)});
-    $$('[data-place-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.placeTab;$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderPlaceTab(e,active);wirePlaceTab(e)});
+    $$('[data-place-tab]').forEach(btn=>btn.onclick=()=>{active=btn.dataset.placeTab;activeMapInfoElementId='';$$('.character-tab').forEach(b=>b.classList.toggle('active',b===btn));$('#characterTabPanel').innerHTML=renderPlaceTab(e,active);wirePlaceTab(e)});
     $("#copyMasterTag").onclick=()=>copyText(e.masterTag||e.id);$("#copyInternalLink").onclick=()=>copyText(`[[${e.masterTag||e.id}|${e.title}]]`);
     wirePlaceTab(e);history.replaceState(null,"",`#entity=${encodeURIComponent(e.id)}`);
   }

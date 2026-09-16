@@ -1730,3 +1730,208 @@ body.edit-mode .inline-edit-mode-toggle{
   .place-description-layout{grid-template-columns:1fr}
   .map-control-menu-body,.map-image-menu-body{min-width:195px}
 }
+
+/* ============================================================
+   A6.7.5 — Mapas: panel lateral único + Punto/Zona/Ruta
+   ============================================================ */
+
+/* El visor completo contiene panel + mapa, por lo que el panel acompaña
+   también a Pestaña y Pantalla completa. */
+.place-map-viewport{
+  padding:0!important;
+  overflow:hidden!important;
+  cursor:default!important;
+  min-height:380px!important;
+  height:min(70vh,760px);
+  max-height:none!important;
+}
+.place-map-workspace{
+  position:relative;
+  display:flex;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+}
+.place-map-main{
+  position:relative;
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:grab;
+}
+.place-map-main:active{cursor:grabbing}
+.place-map-canvas{
+  min-width:0!important;
+  width:min(100%,1000px)!important;
+  max-width:100%;
+  margin:auto!important;
+}
+
+/* Único panel técnico de edición. */
+.map-side-panel{
+  position:relative;
+  z-index:55;
+  flex:0 0 310px;
+  width:310px;
+  min-width:0;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-right:1px solid rgba(212,178,122,.16);
+  background:linear-gradient(180deg,rgba(24,27,34,.985),rgba(13,18,23,.99));
+  box-shadow:10px 0 28px rgba(0,0,0,.17);
+  cursor:default;
+  transition:width .14s ease,flex-basis .14s ease;
+}
+.map-side-panel-scroll{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:42px 8px 10px;
+  scrollbar-width:thin;
+}
+.map-panel-collapse{
+  position:absolute;
+  z-index:4;
+  top:8px;
+  right:8px;
+  width:27px;
+  height:27px;
+  display:grid;
+  place-items:center;
+  border:1px solid rgba(212,178,122,.18);
+  border-radius:7px;
+  background:rgba(45,39,48,.94);
+  color:#d9bd91;
+  cursor:pointer;
+}
+.map-edit-panel.collapsed{
+  flex-basis:42px;
+  width:42px;
+}
+.map-edit-panel.collapsed .map-side-panel-scroll{display:none}
+.map-edit-panel.collapsed .map-panel-collapse{right:7px}
+
+/* Panel de información en modo Listo. */
+.map-info-panel{flex-basis:300px;width:300px}
+.map-info-panel .map-side-panel-scroll{padding-top:8px}
+.map-side-panel-head{
+  flex:0 0 auto;
+  min-height:48px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:8px 9px;
+  border-bottom:1px solid rgba(212,178,122,.11);
+  background:linear-gradient(90deg,rgba(78,57,81,.24),rgba(41,63,78,.14));
+}
+.map-side-panel-head small{display:block;color:#927e65;font-size:7px;text-transform:uppercase;letter-spacing:.08em}
+.map-side-panel-head strong{display:block;margin-top:2px;color:#eadcc7;font-size:10.5px}
+.map-panel-close{
+  width:27px;height:27px;border:1px solid rgba(212,178,122,.15);border-radius:7px;
+  background:rgba(29,31,39,.8);color:#cbb596;cursor:pointer
+}
+.map-info-category{font-size:7.5px;color:#a88f70;text-transform:uppercase;letter-spacing:.07em}
+.map-info-link{
+  width:100%;text-align:left;border:1px solid rgba(212,178,122,.12);border-radius:7px;
+  background:rgba(55,47,59,.36);color:#e4cfad;padding:7px 8px;cursor:pointer;font-size:8.5px
+}
+.map-info-text{color:#cbbba5;font-size:9.2px;line-height:1.62;white-space:pre-wrap}
+.map-info-facts{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.map-info-facts span{padding:6px;border:1px solid rgba(74,115,132,.17);border-radius:6px;background:rgba(37,63,75,.14);color:#aabec3;font-size:7.7px}
+.map-info-facts strong{display:block;margin-top:2px;color:#ead8bc;font-size:8.5px}
+.map-info-media{display:grid;gap:7px}
+.map-info-media figure{margin:0;overflow:hidden;border:1px solid rgba(212,178,122,.1);border-radius:8px;background:rgba(0,0,0,.12)}
+.map-info-media img,.map-info-media video{display:block;width:100%;height:auto;max-height:240px;object-fit:contain;background:#0e1217}
+.map-info-media figcaption{padding:6px 7px;color:#a99578;font-size:7.8px;line-height:1.4}
+
+/* Los cuatro apartados técnicos quedan compactos dentro del mismo panel. */
+.map-side-panel .map-config-panel{
+  margin:0 0 6px;
+  border-radius:8px;
+  box-shadow:none;
+}
+.map-side-panel .map-config-panel>summary{padding:8px 9px;font-size:10px}
+.map-side-panel .map-config-body{padding:8px;gap:8px}
+.map-side-panel .map-settings-grid{grid-template-columns:1fr;gap:6px}
+.map-side-panel .map-setting-row{grid-template-columns:92px minmax(0,1fr);gap:5px}
+.compact-map-config h4{font-size:9.4px!important;margin-top:4px!important}
+.compact-layer-row{
+  grid-template-columns:minmax(90px,1fr) 46px 34px auto auto!important;
+}
+.single-column-map-options{margin-top:6px;color:#a99074;font-size:8px}
+
+/* Crear: solo Punto, Zona y Ruta como tipos principales. */
+.map-element-create-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.map-route-create{position:relative}
+.map-route-create>summary{list-style:none;cursor:pointer}
+.map-route-create>summary::-webkit-details-marker{display:none}
+.map-route-create-menu{
+  position:absolute;
+  z-index:80;
+  left:0;
+  top:calc(100% + 5px);
+  width:260px;
+  max-height:390px;
+  overflow:auto;
+  padding:7px;
+  display:grid;
+  gap:6px;
+  border:1px solid rgba(212,178,122,.17);
+  border-radius:8px;
+  background:rgba(13,18,24,.99);
+  box-shadow:0 14px 28px rgba(0,0,0,.36);
+}
+.disabled-summary{opacity:.35;pointer-events:none}
+.map-route-generator-inline{border-top:1px solid rgba(212,178,122,.09);padding-top:5px}
+.map-route-generator-inline>summary{cursor:pointer;color:#ccb795;font-size:8.4px;padding:4px 1px}
+.map-route-generator-body{display:grid;gap:7px;padding-top:6px}
+.map-active-tool{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:6px;border:1px solid rgba(212,178,122,.09);border-radius:7px;background:rgba(74,62,80,.15);color:#a99075;font-size:7.8px}
+.map-active-tool span{flex:1}
+
+.route-mode-switch{display:grid;grid-template-columns:70px minmax(0,1fr);align-items:center;gap:6px;padding:6px;border:1px solid rgba(212,178,122,.1);border-radius:7px;background:rgba(44,52,63,.14);color:#b19d80;font-size:8px}
+.map-route-segments-details,.map-advanced-shape{margin-top:7px;border-top:1px solid rgba(212,178,122,.08);padding-top:6px}
+.map-route-segments-details>summary,.map-advanced-shape>summary{cursor:pointer;color:#c6af8d;font-size:8.3px}
+.compact-node-list{display:flex;gap:4px;flex-wrap:wrap}
+.compact-node-list>span{display:inline-flex;align-items:center;gap:3px;padding:3px 4px;border:1px solid rgba(212,178,122,.08);border-radius:6px;color:#9f8b70;font-size:7.4px}
+.compact-node-list .tiny-map-btn{padding:2px 4px}
+
+/* Debajo del mapa solo quedan controles de vista. */
+.map-bottom-controls.view-only{
+  left:auto!important;
+  right:10px!important;
+  width:auto;
+  justify-content:flex-end!important;
+}
+.map-bottom-controls.view-only .map-bottom-right{padding:4px 5px}
+.map-bottom-controls.view-only .map-compact-btn{padding:5px 7px}
+
+/* Pestaña y fullscreen conservan panel y mapa porque ambos viven en workspace. */
+.place-map-viewport.map-tab-mode .place-map-workspace,
+.place-map-viewport:fullscreen .place-map-workspace{width:100%;height:100%}
+.place-map-viewport.map-tab-mode .place-map-main,
+.place-map-viewport:fullscreen .place-map-main{height:100%}
+.place-map-viewport.map-tab-mode .place-map-canvas,
+.place-map-viewport:fullscreen .place-map-canvas{width:min(100%,1500px)!important}
+
+@media(max-width:900px){
+  .map-side-panel{flex-basis:270px;width:270px}
+  .map-info-panel{flex-basis:260px;width:260px}
+}
+@media(max-width:680px){
+  .place-map-viewport{height:68vh}
+  .map-side-panel{flex-basis:235px;width:235px}
+  .map-edit-panel.collapsed{flex-basis:38px;width:38px}
+  .map-info-panel{flex-basis:230px;width:230px}
+  .map-route-create-menu{width:215px}
+  .map-info-facts{grid-template-columns:1fr}
+}
