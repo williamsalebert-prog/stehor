@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = "sethoria-atlas-prototipo-a";
-  const APP_BUILD = "A6.7.3-map-controls";
+  const APP_BUILD = "A6.7.4-places-maps-pass1";
   let editMode = localStorage.getItem("sethoria-edit-mode")==="1";
 
   function editModeToggleMarkup(){
@@ -2471,10 +2471,6 @@
       const visibleLayers=new Set(m.layers.filter(l=>l.visible!==false).map(l=>l.id));
       if(!el.layerIds.some(id=>visibleLayers.has(id)))return false;
     }
-    if(el.levelIds?.length){
-      const visibleLevels=new Set(m.levels.filter(l=>l.visible!==false).map(l=>l.id));
-      if(!el.levelIds.some(id=>visibleLevels.has(id)))return false;
-    }
     const time=m.settings.time||{};
     if(time.enabled&&time.reference){
       const ref=Date.parse(time.reference);
@@ -2657,13 +2653,17 @@
     return {x:Math.max(0,Math.min(100,p.x)),y:Math.max(0,Math.min(100,p.y))};
   }
 
+
   function renderPlaceDescription(e){
     const p=placeData(e);
-    return `<div class="character-content-stack">
-      <section class="character-section media-aware-block place-description-free">
-        ${renderRichFlow(e.summary||"","summary",p.description.media,"place.description.media",e)}
-        ${editMode?`<button class="inline-add-media edit-only" data-place-add-media="place.description.media" data-media-text-path="summary">＋ Multimedia</button>`:""}
-      </section>
+    return `<div class="place-description-layout">
+      ${renderPlaceInfobox(e)}
+      <div class="character-content-stack">
+        <section class="character-section media-aware-block place-description-free">
+          ${renderRichFlow(e.summary||"","summary",p.description.media,"place.description.media",e)}
+          ${editMode?`<button class="inline-add-media edit-only" data-place-add-media="place.description.media" data-media-text-path="summary">＋ Multimedia</button>`:""}
+        </section>
+      </div>
     </div>`;
   }
 
@@ -2840,19 +2840,6 @@
     return `<div class="map-two-columns"><div><strong>Capas restringidas</strong><div class="map-check-list">${m.layers.map(l=>`<label><input type="checkbox" data-route-layer-pref="restricted" value="${l.id}" ${d.restrictedLayerIds.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join("")}</div></div><div><strong>Capas preferidas</strong><div class="map-check-list">${m.layers.map(l=>`<label><input type="checkbox" data-route-layer-pref="preferred" value="${l.id}" ${d.preferredLayerIds.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join("")}</div></div></div>`;
   }
 
-  function renderMapLevels(m){
-    return `<details class="map-config-panel"><summary>Niveles</summary><div class="map-config-body">
-      <div class="map-mini-head"><span></span><button class="tiny-map-btn" data-add-level>＋ Nivel</button></div>
-      ${m.levels.length?`<div class="map-table-list">${m.levels.map((l,i)=>`<div class="map-table-row level-row">
-        ${mapInput(`levels.${i}.name`,l.name||"Nivel")}
-        ${mapInput(`levels.${i}.order`,l.order??i,{type:"number",step:1,placeholder:"Orden"})}
-        ${mapInput(`levels.${i}.elevation`,l.elevation??"",{type:"number",step:"any",placeholder:"Elevación"})}
-        <label class="mini-check"><input type="checkbox" data-map-path="levels.${i}.visible" data-map-type="bool" ${l.visible!==false?"checked":""}> Visible</label>
-        <label class="mini-check"><input type="radio" name="default-level-${m.id}" data-default-level="${i}" ${l.default?"checked":""}> Pred.</label>
-        <button class="tiny-map-btn danger" data-remove-level="${i}">×</button>
-      </div>`).join("")}</div>`:`<div class="empty small">Sin niveles.</div>`}
-    </div></details>`;
-  }
 
   function renderMapLayers(m){
     return `<details class="map-config-panel"><summary>Capas</summary><div class="map-config-body">
@@ -2897,9 +2884,8 @@
       ${settingRow("Grosor",mapInput(`elements.${m.elements.indexOf(el)}.style.lineWidth`,el.style?.lineWidth??"",{type:"number",min:.1,max:30,step:.1}))}
       ${settingRow("Trazo",mapInput(`elements.${m.elements.indexOf(el)}.style.dash`,el.style?.dash||"",{placeholder:"Ej. 3 2"}))}
     </div>
-    <div class="map-two-columns">
+    <div class="map-two-columns single-column-map-options">
       <div><strong>Capas</strong><div class="map-check-list">${m.layers.length?m.layers.map(l=>`<label><input type="checkbox" data-element-layer="${el.id}" value="${l.id}" ${el.layerIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Capa")}</label>`).join(""):`<span>—</span>`}</div></div>
-      <div><strong>Niveles</strong><div class="map-check-list">${m.levels.length?m.levels.map(l=>`<label><input type="checkbox" data-element-level="${el.id}" value="${l.id}" ${el.levelIds?.includes(l.id)?"checked":""}> ${esc(l.name||"Nivel")}</label>`).join(""):`<span>—</span>`}</div></div>
     </div>
     <label class="map-textarea-label"><span>Nota</span><textarea class="map-textarea" data-map-path="elements.${m.elements.indexOf(el)}.note">${esc(el.note||"")}</textarea></label>`;
   }
@@ -2911,7 +2897,6 @@
       ${toArray(el.nodes).map((n,i)=>`<div class="node-row">
         ${mapInput(`elements.${idx}.nodes.${i}.x`,n.x,{type:"number",min:0,max:100,step:.01,placeholder:"X %"})}
         ${mapInput(`elements.${idx}.nodes.${i}.y`,n.y,{type:"number",min:0,max:100,step:.01,placeholder:"Y %"})}
-        ${el.kind==="route"?mapSelect(`elements.${idx}.nodeLevels.${i}`,el.nodeLevels?.[i]||"",[["","Nivel —"],...m.levels.map(l=>[l.id,l.name||"Nivel"]) ]):""}
         <button class="tiny-map-btn danger" data-remove-node="${i}" data-node-owner="${el.id}">×</button>
       </div>`).join("")}
     </div>`;
@@ -3000,11 +2985,9 @@
 
   function renderRouteSpecific(m,r){
     const i=m.elements.indexOf(r),stats=routeStats(m,r),timeUnit=m.settings.units.time||"h",speedUnit=m.settings.units.speed||"km/h";
-    const startLevel=m.levels.find(l=>l.id===r.nodeLevels?.[0]),endLevel=m.levels.find(l=>l.id===r.nodeLevels?.[r.nodeLevels.length-1]);
-    const levelDelta=startLevel&&endLevel&&Number.isFinite(Number(startLevel.elevation))&&Number.isFinite(Number(endLevel.elevation))?Number(endLevel.elevation)-Number(startLevel.elevation):null;
     const manualDist=Number(r.manualDistance)>0?`${fmtNumber(r.manualDistance)} ${m.settings.units.distance}`:"";
     return `<h4>Ruta</h4>
-      <div class="derived-strip multi"><span>Distancia calculada <strong>${formatDistance(stats.meters,m)}</strong></span>${manualDist?`<span>Distancia manual <strong>${manualDist}</strong></span>`:""}<span>Duración calculada <strong>${stats.seconds?`${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}`:"—"}</strong></span>${stats.secondsMin&&stats.secondsMax?`<span>Rango por velocidad <strong>${fmtNumber(secondsToTime(stats.secondsMin,timeUnit))}–${fmtNumber(secondsToTime(stats.secondsMax,timeUnit))} ${timeUnit}</strong></span>`:""}${Number(r.durationManual)>0?`<span>Duración manual <strong>${fmtNumber(r.durationManual)} ${timeUnit}</strong></span>`:""}<span>Velocidad media <strong>${stats.avgUnit?`${fmtNumber(stats.avgUnit)} ${speedUnit}`:"—"}</strong></span>${stats.calculatedArrival?`<span>Llegada calculada <strong>${esc(stats.calculatedArrival)}</strong></span>`:""}${startLevel||endLevel?`<span>Niveles <strong>${esc(startLevel?.name||"—")} → ${esc(endLevel?.name||"—")}</strong></span>`:""}${levelDelta!==null?`<span>Desnivel <strong>${fmtNumber(levelDelta)} ${esc(m.settings.units.altitude||"m")}</strong></span>`:""}</div>
+      <div class="derived-strip multi"><span>Distancia calculada <strong>${formatDistance(stats.meters,m)}</strong></span>${manualDist?`<span>Distancia manual <strong>${manualDist}</strong></span>`:""}<span>Duración calculada <strong>${stats.seconds?`${fmtNumber(secondsToTime(stats.seconds,timeUnit))} ${timeUnit}`:"—"}</strong></span>${stats.secondsMin&&stats.secondsMax?`<span>Rango por velocidad <strong>${fmtNumber(secondsToTime(stats.secondsMin,timeUnit))}–${fmtNumber(secondsToTime(stats.secondsMax,timeUnit))} ${timeUnit}</strong></span>`:""}${Number(r.durationManual)>0?`<span>Duración manual <strong>${fmtNumber(r.durationManual)} ${timeUnit}</strong></span>`:""}<span>Velocidad media <strong>${stats.avgUnit?`${fmtNumber(stats.avgUnit)} ${speedUnit}`:"—"}</strong></span>${stats.calculatedArrival?`<span>Llegada calculada <strong>${esc(stats.calculatedArrival)}</strong></span>`:""}</div>
       ${stats.zones.length?`<div class="route-zones"><strong>Zonas atravesadas</strong>${stats.zones.map(z=>`<span>${esc(z.name)} · ≈${fmtNumber(z.ratio*100,1)}% · ${formatDistance(z.meters,m)}</span>`).join("")}</div>`:""}
       ${r.proposal?`<button class="map-action accept-route" data-accept-route="${r.id}">Aceptar propuesta</button>`:""}
       <div class="map-settings-grid">
@@ -3044,58 +3027,78 @@
     </div></details>`;
   }
 
+
   function renderRouteGenerator(m){
     const g=m.generator,points=m.elements.filter(x=>x.kind==="point"),zones=m.elements.filter(x=>x.kind==="zone"),lines=m.elements.filter(x=>x.kind==="line");
+    const validOrigin=points.some(p=>p.id===g.originPointId);
+    const validDestination=points.some(p=>p.id===g.destinationPointId);
+    const samePoint=validOrigin&&validDestination&&g.originPointId===g.destinationPointId;
+    const canGenerate=points.length>=2&&validOrigin&&validDestination&&!samePoint;
+
     return `<details class="map-config-panel"><summary>Generar ruta</summary><div class="map-config-body">
       <div class="map-settings-grid">
-        ${settingRow("Origen",`<select class="map-field" data-generator-field="originPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.originPointId===p.id?"selected":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
-        ${settingRow("Destino",`<select class="map-field" data-generator-field="destinationPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.destinationPointId===p.id?"selected":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
+        ${settingRow("Origen",`<select class="map-field" data-generator-field="originPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.originPointId===p.id?"selected":""} ${g.destinationPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
+        ${settingRow("Destino",`<select class="map-field" data-generator-field="destinationPointId"><option value="">—</option>${points.map(p=>`<option value="${p.id}" ${g.destinationPointId===p.id?"selected":""} ${g.originPointId===p.id?"disabled":""}>${esc(p.name||"Punto")}</option>`).join("")}</select>`)}
         ${settingRow("Criterio",`<select class="map-field" data-generator-field="criterion"><option ${g.criterion==="distancia"?"selected":""}>distancia</option><option ${g.criterion==="tiempo"?"selected":""}>tiempo</option></select>`)}
       </div>
+      ${points.length<2?`<div class="map-condition-note">Necesitas al menos dos puntos distintos para generar una ruta.</div>`:""}
+      ${samePoint?`<div class="map-condition-note error">Origen y destino no pueden ser el mismo punto.</div>`:""}
       <div class="map-three-columns">
-        <div><strong>Waypoints</strong><div class="map-check-list">${points.map(p=>`<label><input type="checkbox" data-generator-list="waypointIds" value="${p.id}" ${g.waypointIds.includes(p.id)?"checked":""}> ${esc(p.name||"Punto")}</label>`).join("")||"—"}</div></div>
+        <div><strong>Waypoints</strong><div class="map-check-list">${points.map(p=>{
+          const blocked=p.id===g.originPointId||p.id===g.destinationPointId;
+          return `<label class="${blocked?"disabled-option":""}"><input type="checkbox" data-generator-list="waypointIds" value="${p.id}" ${g.waypointIds.includes(p.id)?"checked":""} ${blocked?"disabled":""}> ${esc(p.name||"Punto")}</label>`;
+        }).join("")||"—"}</div></div>
         <div><strong>Zonas a evitar</strong><div class="map-check-list">${zones.map(z=>`<label><input type="checkbox" data-generator-list="avoidZoneIds" value="${z.id}" ${g.avoidZoneIds.includes(z.id)?"checked":""}> ${esc(z.name||"Zona")}</label>`).join("")||"—"}</div></div>
         <div><strong>Líneas preferidas</strong><div class="map-check-list">${lines.map(l=>`<label><input type="checkbox" data-generator-list="preferredLineIds" value="${l.id}" ${g.preferredLineIds.includes(l.id)?"checked":""}> ${esc(l.name||"Línea")}</label>`).join("")||"—"}</div></div>
       </div>
-      <button class="map-action" data-generate-route>Generar propuesta</button>
+      <button class="map-action" data-generate-route ${canGenerate?"":"disabled"}>Generar propuesta</button>
     </div></details>`;
   }
-
 
   function renderMapToolbar(m){
     return "";
   }
 
+
   function renderMapBottomControls(m){
     const activeTool=placeMapTool?.mapId===m.id;
     const drawing=activeTool&&["draw-line","draw-zone","draw-route","append-nodes","zone-part","zone-hole"].includes(placeMapTool.mode);
     const baseScale=Math.round((Number(m.settings.baseScale)||1)*100);
+    const canDraw=!!m.image?.src && !activeTool;
 
     return `<div class="map-bottom-controls" data-map-bottom-controls>
       <div class="map-bottom-left">
         ${editMode?`
-          <button class="map-compact-btn" data-draw-tool="point">＋ Punto</button>
-          <button class="map-compact-btn" data-draw-tool="line">＋ Línea</button>
-          <button class="map-compact-btn" data-draw-tool="zone">＋ Zona</button>
-          <button class="map-compact-btn" data-draw-tool="route">＋ Ruta</button>
+          <details class="map-control-menu">
+            <summary>Crear</summary>
+            <div class="map-control-menu-body">
+              <button class="map-compact-btn" data-draw-tool="point" ${canDraw?"":"disabled"}>Punto</button>
+              <button class="map-compact-btn" data-draw-tool="line" ${canDraw?"":"disabled"}>Línea</button>
+              <button class="map-compact-btn" data-draw-tool="zone" ${canDraw?"":"disabled"}>Zona</button>
+              <button class="map-compact-btn" data-draw-tool="route" ${canDraw?"":"disabled"}>Ruta manual</button>
+              ${!m.image?.src?`<small>Carga una imagen base para crear elementos.</small>`:""}
+              ${activeTool?`<small>Termina o cancela la herramienta activa antes de iniciar otra.</small>`:""}
+            </div>
+          </details>
           ${drawing?`<button class="map-compact-btn finish" data-finish-map-tool>Terminar</button>`:""}
           ${activeTool?`<button class="map-compact-btn cancel" data-cancel-map-tool>Cancelar</button>`:""}
           <details class="map-image-menu">
             <summary>Imagen</summary>
             <div class="map-image-menu-body">
-              <button class="map-compact-btn" data-map-rotate-90>↻ 90°</button>
-              <button class="map-compact-btn ${m.settings.mirrorX?"active":""}" data-map-mirror>Espejo</button>
-              <label class="map-base-scale-label"><span>Tamaño</span><input type="range" min="50" max="200" step="5" value="${baseScale}" data-map-base-scale></label>
-              <button class="map-compact-btn" data-map-load-image>Cambiar</button>
-              <button class="map-compact-btn danger" data-map-remove-image>Quitar</button>
+              <button class="map-compact-btn" data-map-rotate-90 ${m.image?.src?"":"disabled"}>↻ 90°</button>
+              <button class="map-compact-btn ${m.settings.mirrorX?"active":""}" data-map-mirror ${m.image?.src?"":"disabled"}>Espejo</button>
+              <label class="map-base-scale-label"><span>Tamaño</span><input type="range" min="50" max="200" step="5" value="${baseScale}" data-map-base-scale ${m.image?.src?"":"disabled"}></label>
+              <button class="map-compact-btn" data-map-load-image>${m.image?.src?"Cambiar":"Cargar"}</button>
+              <button class="map-compact-btn danger" data-map-remove-image ${m.image?.src?"":"disabled"}>Quitar imagen</button>
             </div>
           </details>
         `:""}
       </div>
       <div class="map-bottom-right">
-        <button class="map-compact-btn" data-map-zoom="reset">100%</button>
-        <button class="map-compact-btn" data-map-view="tab">Pestaña</button>
-        <button class="map-compact-btn" data-map-view="fullscreen">Pantalla</button>
+        <span class="map-bottom-group-label">Vista</span>
+        <button class="map-compact-btn" data-map-zoom="reset" ${m.image?.src?"":"disabled"}>100%</button>
+        <button class="map-compact-btn" data-map-view="tab" ${m.image?.src?"":"disabled"}>Pestaña</button>
+        <button class="map-compact-btn" data-map-view="fullscreen" ${m.image?.src?"":"disabled"}>Pantalla</button>
         <button class="map-compact-btn" data-map-view="normal">Normal</button>
       </div>
     </div>`;
@@ -3108,14 +3111,22 @@
     }
     const m=activePlaceMap(e);
     return `<div class="place-maps-shell">
-      <div class="place-map-subtabs">${p.maps.map(x=>`<button class="place-map-subtab ${x.id===m.id?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`).join("")}${editMode?`<button class="place-map-subtab add edit-only" data-add-place-map>＋</button>`:""}</div>
-      <div class="place-map-head"><div>${editMode
-        ? `<strong class="map-title-direct" contenteditable="true" spellcheck="false" data-map-title-edit>${esc(m.title||"Mapa")}</strong>`
-        : `<strong>${esc(m.title||"Mapa")}</strong>`}</div>${editMode?`<button class="tiny-map-btn danger edit-only" data-remove-place-map="${m.id}">Quitar mapa</button>`:""}</div>
+      <div class="place-map-subtabs">
+        ${p.maps.map(x=>{
+          const active=x.id===m.id;
+          return `<div class="place-map-tab-wrap ${active?"active":""}">
+            ${active&&editMode
+              ? `<span class="place-map-subtab active map-title-direct" contenteditable="true" spellcheck="false" data-map-title-edit>${esc(x.title||"Mapa")}</span>`
+              : `<button class="place-map-subtab ${active?"active":""}" data-place-map-tab="${x.id}">${esc(x.title||"Mapa")}</button>`}
+            ${active&&editMode?`<button class="place-map-tab-remove edit-only" data-remove-place-map="${x.id}" title="Quitar mapa">×</button>`:""}
+          </div>`;
+        }).join("")}
+        ${editMode?`<button class="place-map-subtab add edit-only" data-add-place-map>＋</button>`:""}
+      </div>
       ${renderMapStage(m)}
       ${editMode?`<div class="map-panels-grid edit-only">
         <div>${renderMapElementList(m)}${renderSelectedElementInspector(e,m)}</div>
-        <div>${renderMapLayers(m)}${renderMapLevels(m)}${renderRouteGenerator(m)}${renderMapGlobalSettings(m)}</div>
+        <div>${renderMapLayers(m)}${renderRouteGenerator(m)}${renderMapGlobalSettings(m)}</div>
       </div>`:""}
     </div>`;
   }
@@ -3165,10 +3176,8 @@
     const arr=selector;if(checked){if(!arr.includes(value))arr.push(value)}else{const i=arr.indexOf(value);if(i>=0)arr.splice(i,1)}
   }
 
+
   function applyDefaultLevel(m,el){
-    const level=m.levels.find(l=>l.default)||null;
-    if(level&&!el.levelIds?.length)el.levelIds=[level.id];
-    if(level&&el.kind==="route"&&Array.isArray(el.nodeLevels))el.nodeLevels=el.nodeLevels.map(x=>x||level.id);
     return el;
   }
 
@@ -3201,7 +3210,7 @@
     if(t.mode==="draw-line"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("line",t.nodes));m.elements.push(el);selectedPlaceMapElementId=el.id}
     else if(t.mode==="draw-zone"&&t.nodes.length>=3){const el=applyDefaultLevel(m,newMapElement("zone",t.nodes));m.elements.push(el);selectedPlaceMapElementId=el.id}
     else if(t.mode==="draw-route"&&t.nodes.length>=2){const el=applyDefaultLevel(m,newMapElement("route",t.nodes));el.transport=m.settings.routeDefaults.defaultTransport||"";el.fixedSpeed=m.settings.routeDefaults.defaultSpeed||"";m.elements.push(el);selectedPlaceMapElementId=el.id}
-    else if(t.mode==="append-nodes"&&t.targetId){const el=placeMapElement(m,t.targetId);if(el){el.nodes.push(...t.nodes);if(el.kind==="route")el.nodeLevels.push(...t.nodes.map(()=>""))}}
+    else if(t.mode==="append-nodes"&&t.targetId){const el=placeMapElement(m,t.targetId);if(el){el.nodes.push(...t.nodes);}}
     else if(t.mode==="zone-part"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.parts.push(t.nodes)}
     else if(t.mode==="zone-hole"&&t.targetId&&t.nodes.length>=3){placeMapElement(m,t.targetId)?.holes.push(t.nodes)}
     placeMapTool=null;saveMapAndRefresh(e);
@@ -3261,6 +3270,8 @@
     const g=m.generator,d=m.settings.routeDefaults;
     const origin=placeMapElement(m,g.originPointId),dest=placeMapElement(m,g.destinationPointId);
     if(!origin||origin.kind!=="point"||!dest||dest.kind!=="point"){alert("Elige un punto de origen y uno de destino.");return}
+    if(origin.id===dest.id){alert("Origen y destino deben ser puntos distintos.");return}
+    g.waypointIds=(g.waypointIds||[]).filter(id=>id!==origin.id&&id!==dest.id);
     let nodes=[{x:origin.x,y:origin.y}];
     for(const id of g.waypointIds){const p=placeMapElement(m,id);if(p?.kind==="point")nodes.push({x:p.x,y:p.y})}
     const preferredLayerSet=new Set(d.preferredLayerIds||[]);
@@ -3427,13 +3438,35 @@
     wireMapStage(e,m);
     if(!editMode)return;
 
-    $('[data-map-rotate-90]')?.addEventListener('click',async()=>{
+    const mapMenus=[...document.querySelectorAll('.map-control-menu,.map-image-menu')];
+    mapMenus.forEach(menu=>menu.addEventListener('click',ev=>ev.stopPropagation()));
+    document.addEventListener('click',ev=>{
+      mapMenus.forEach(menu=>{if(menu.open&&!menu.contains(ev.target))menu.open=false});
+    },{once:true});
+
+    $('[data-map-rotate-90]')?.addEventListener('click',async ev=>{
+      ev.preventDefault();
       m.settings.rotation=((Number(m.settings.rotation)||0)+90)%360;
-      await saveMapAndRefresh(e);
+      const group=$('.map-content-transform');
+      if(group){
+        const scale=Math.max(.5,Math.min(2,Number(m.settings.baseScale)||1));
+        const mirror=m.settings.mirrorX?-1:1;
+        group.setAttribute('transform',`translate(50 50) rotate(${m.settings.rotation}) scale(${mirror*scale} ${scale}) translate(-50 -50)`);
+      }
+      await saveEntityDirect(e);
     });
-    $('[data-map-mirror]')?.addEventListener('click',async()=>{
+    $('[data-map-mirror]')?.addEventListener('click',async ev=>{
+      ev.preventDefault();
       m.settings.mirrorX=!m.settings.mirrorX;
-      await saveMapAndRefresh(e);
+      ev.currentTarget.classList.toggle('active',m.settings.mirrorX);
+      const group=$('.map-content-transform');
+      if(group){
+        const rot=((Number(m.settings.rotation)||0)%360+360)%360;
+        const scale=Math.max(.5,Math.min(2,Number(m.settings.baseScale)||1));
+        const mirror=m.settings.mirrorX?-1:1;
+        group.setAttribute('transform',`translate(50 50) rotate(${rot}) scale(${mirror*scale} ${scale}) translate(-50 -50)`);
+      }
+      await saveEntityDirect(e);
     });
     $('[data-map-base-scale]')?.addEventListener('input',ev=>{
       const value=Math.max(50,Math.min(200,Number(ev.currentTarget.value)||100))/100;
@@ -3482,9 +3515,6 @@
 
     $('[data-add-layer]')?.addEventListener('click',async()=>{m.layers.push({id:mapUid('layer'),name:'Nueva capa',order:m.layers.length,visible:true,opacity:1,style:{color:'#d4b27a'}});await saveMapAndRefresh(e)});
     $$('[data-remove-layer]').forEach(btn=>btn.onclick=async()=>{const item=m.layers[Number(btn.dataset.removeLayer)];if(!item)return;m.layers.splice(Number(btn.dataset.removeLayer),1);cleanupMapReferences(m,item);await saveMapAndRefresh(e)});
-    $('[data-add-level]')?.addEventListener('click',async()=>{m.levels.push({id:mapUid('level'),name:'Nuevo nivel',order:m.levels.length,elevation:'',visible:true,default:!m.levels.length});await saveMapAndRefresh(e)});
-    $$('[data-remove-level]').forEach(btn=>btn.onclick=async()=>{const item=m.levels[Number(btn.dataset.removeLevel)];if(!item)return;m.levels.splice(Number(btn.dataset.removeLevel),1);cleanupMapReferences(m,item);if(m.levels.length&&!m.levels.some(l=>l.default))m.levels[0].default=true;await saveMapAndRefresh(e)});
-    $$('[data-default-level]').forEach(r=>r.onchange=async()=>{m.levels.forEach((l,i)=>l.default=i===Number(r.dataset.defaultLevel));await saveMapAndRefresh(e)});
 
     $$('[data-route-layer-pref]').forEach(c=>c.onchange=async()=>{const key=c.dataset.routeLayerPref==='restricted'?'restrictedLayerIds':'preferredLayerIds';updateListFromChecks(m.settings.routeDefaults[key],c.checked,c.value);await saveMapAndRefresh(e)});
 
@@ -3496,25 +3526,32 @@
     $$('[data-delete-map-element]').forEach(btn=>btn.onclick=async()=>{const idx=m.elements.findIndex(x=>x.id===btn.dataset.deleteMapElement);if(idx<0)return;const removed=m.elements[idx];m.elements.splice(idx,1);cleanupMapReferences(m,removed);if(selectedPlaceMapElementId===btn.dataset.deleteMapElement)selectedPlaceMapElementId="";await saveMapAndRefresh(e)});
     $$('[data-element-visible]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementVisible);if(el){el.visible=c.checked;await saveMapAndRefresh(e)}});
     $$('[data-element-layer]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLayer);if(el){el.layerIds||=[];updateListFromChecks(el.layerIds,c.checked,c.value);await saveMapAndRefresh(e)}});
-    $$('[data-element-level]').forEach(c=>c.onchange=async()=>{const el=placeMapElement(m,c.dataset.elementLevel);if(el){el.levelIds||=[];updateListFromChecks(el.levelIds,c.checked,c.value);await saveMapAndRefresh(e)}});
 
     $$('[data-route-waypoint]').forEach(c=>c.onchange=async()=>{const r=placeMapElement(m,c.dataset.routeWaypoint);if(!r)return;r.waypointPointIds||=[];updateListFromChecks(r.waypointPointIds,c.checked,c.value);await saveMapAndRefresh(e)});
     $$('[data-point-distance-target]').forEach(sel=>sel.onchange=()=>{const a=placeMapElement(m,sel.dataset.pointDistanceTarget),b=placeMapElement(m,sel.value),out=sel.parentElement.querySelector('[data-point-distance-result]');if(!a||!b||!out){if(out)out.textContent='—';return}out.textContent=formatDistance(segmentMeters(m,{x:a.x,y:a.y},{x:b.x,y:b.y}),m)});
 
     $$('[data-append-node]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'append-nodes',mapId:m.id,targetId:btn.dataset.appendNode,nodes:[]};refreshPlaceTab(e)});
-    $$('[data-remove-node]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.nodeOwner),idx=Number(btn.dataset.removeNode);if(!el)return;el.nodes.splice(idx,1);if(el.nodeLevels)el.nodeLevels.splice(idx,1);await saveMapAndRefresh(e)});
+    $$('[data-remove-node]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.nodeOwner),idx=Number(btn.dataset.removeNode);if(!el)return;el.nodes.splice(idx,1);await saveMapAndRefresh(e)});
     $$('[data-draw-zone-part]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'zone-part',mapId:m.id,targetId:btn.dataset.drawZonePart,nodes:[]};refreshPlaceTab(e)});
     $$('[data-draw-zone-hole]').forEach(btn=>btn.onclick=()=>{placeMapTool={mode:'zone-hole',mapId:m.id,targetId:btn.dataset.drawZoneHole,nodes:[]};refreshPlaceTab(e)});
 
     $$('[data-add-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.addRouteSegment);if(!r)return;r.segments.push({fromIndex:0,toIndex:Math.max(1,r.nodes.length-1),transport:m.settings.routeDefaults.defaultTransport||'',speed:m.settings.routeDefaults.defaultSpeed||'',speedMin:'',speedMax:'',speedApprox:false,terrain:'',slope:'',pauses:'',condition:'',factor:1,durationManual:''});await saveMapAndRefresh(e)});
     $$('[data-remove-route-segment]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.routeOwner);if(!r)return;r.segments.splice(Number(btn.dataset.removeRouteSegment),1);await saveMapAndRefresh(e)});
     $$('[data-accept-route]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.acceptRoute);if(!r)return;r.proposal=false;if(r.name==='Ruta propuesta')r.name='Ruta';await saveMapAndRefresh(e)});
-    $$('[data-regenerate-route-section]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.regenerateRouteSection);if(!r)return;const wrap=btn.closest('.route-regenerate'),inputs=wrap.querySelectorAll('[data-map-path^="__regen"]');const from=Math.max(0,Number(inputs[0]?.value)||0),to=Math.min(r.nodes.length-1,Number(inputs[1]?.value)||r.nodes.length-1);if(to<=from)return;let repl=densifyPolyline([r.nodes[from],r.nodes[to]],Math.max(2,Number(m.settings.routeDefaults.pointDensity)||2));repl=smoothPolyline(repl,Number(m.settings.routeDefaults.smoothness)||0);r.nodes.splice(from,to-from+1,...repl);r.nodeLevels=r.nodes.map((_,i)=>r.nodeLevels?.[i]||'');await saveMapAndRefresh(e)});
+    $$('[data-regenerate-route-section]').forEach(btn=>btn.onclick=async()=>{const r=placeMapElement(m,btn.dataset.regenerateRouteSection);if(!r)return;const wrap=btn.closest('.route-regenerate'),inputs=wrap.querySelectorAll('[data-map-path^="__regen"]');const from=Math.max(0,Number(inputs[0]?.value)||0),to=Math.min(r.nodes.length-1,Number(inputs[1]?.value)||r.nodes.length-1);if(to<=from)return;let repl=densifyPolyline([r.nodes[from],r.nodes[to]],Math.max(2,Number(m.settings.routeDefaults.pointDensity)||2));repl=smoothPolyline(repl,Number(m.settings.routeDefaults.smoothness)||0);r.nodes.splice(from,to-from+1,...repl);await saveMapAndRefresh(e)});
 
     $$('[data-add-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.addElementMedia);if(!el)return;const items=await chooseMediaMany();if(!items.length)return;el.media||=[];el.media.push(...items);await saveMapAndRefresh(e)});
     $$('[data-remove-element-media]').forEach(btn=>btn.onclick=async()=>{const el=placeMapElement(m,btn.dataset.mediaOwner);if(!el)return;el.media.splice(Number(btn.dataset.removeElementMedia),1);await saveMapAndRefresh(e)});
 
-    $$('[data-generator-field]').forEach(input=>input.onchange=async()=>{m.generator[input.dataset.generatorField]=input.value;await saveEntityDirect(e)});
+    $$('[data-generator-field]').forEach(input=>input.onchange=async()=>{
+      const key=input.dataset.generatorField;
+      m.generator[key]=input.value;
+      if(key==="originPointId"&&m.generator.destinationPointId===input.value)m.generator.destinationPointId="";
+      if(key==="destinationPointId"&&m.generator.originPointId===input.value)m.generator.originPointId="";
+      m.generator.waypointIds=(m.generator.waypointIds||[]).filter(id=>id!==m.generator.originPointId&&id!==m.generator.destinationPointId);
+      await saveEntityDirect(e);
+      refreshPlaceTab(e);
+    });
     $$('[data-generator-list]').forEach(c=>c.onchange=async()=>{const arr=m.generator[c.dataset.generatorList];updateListFromChecks(arr,c.checked,c.value);await saveEntityDirect(e)});
     $('[data-generate-route]')?.addEventListener('click',()=>generateRouteProposal(e,m));
 
@@ -3555,10 +3592,10 @@
     $("#view").innerHTML=`<div class="character-page place-page">
       <div class="page-head">${backButton()}<h1 class="page-title">Lugares</h1></div>
       <header class="character-titlebar"><div class="character-title-copy"><h1>${renderEditableName(e.title,"title",e,{cls:"main-entity-name"})}</h1>${e.subtitle?`<div class="character-subtitle">${esc(e.subtitle)}</div>`:""}</div>${editModeToggleMarkup()}</header>
-      <div class="character-wiki-layout">${renderPlaceInfobox(e)}<main class="character-article">
+      <main class="character-article place-article-full">
         <nav class="character-tabs" aria-label="Secciones del lugar">${PLACE_TABS.map(([id,label,iconName])=>`<button class="character-tab ${id===active?"active":""}" data-place-tab="${id}"><span>${icon(iconName)}</span>${esc(label)}</button>`).join("")}</nav>
         <section id="characterTabPanel" class="character-tab-panel">${renderPlaceTab(e,active)}</section>
-      </main></div>${renderTechnical(e)}</div>`;
+      </main>${renderTechnical(e)}</div>`;
     $("#pageBack").onclick=()=>showCategory("lugares");
     wireEditModeToggles();
     $('[data-change-cover="place"]')?.addEventListener('click',()=>choosePortrait(e,()=>showPlaceEntity(e,active)));
