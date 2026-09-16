@@ -1935,3 +1935,184 @@ body.edit-mode .inline-edit-mode-toggle{
   .map-route-create-menu{width:215px}
   .map-info-facts{grid-template-columns:1fr}
 }
+
+
+/* ============================================================
+   A6.7.6 — Panel por pestañas + dibujo visible + colapso real
+   ============================================================ */
+
+.map-edit-panel{
+  overflow:visible!important;
+}
+.map-panel-tabs{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:4px;
+  padding:8px 8px 6px;
+  border-bottom:1px solid rgba(212,178,122,.11);
+  background:rgba(14,18,24,.72);
+}
+.map-panel-tab{
+  height:30px;
+  border:1px solid rgba(212,178,122,.12);
+  border-radius:7px;
+  background:rgba(28,31,38,.78);
+  color:#a99577;
+  font-size:14px;
+  cursor:pointer;
+}
+.map-panel-tab:hover,.map-panel-tab.active{
+  color:#f0d9b5;
+  border-color:rgba(212,178,122,.28);
+  background:linear-gradient(180deg,rgba(76,58,82,.65),rgba(39,58,70,.58));
+}
+.map-side-panel-scroll{
+  padding:8px!important;
+}
+.map-panel-pane{display:grid;gap:8px}
+.map-pane-head,.map-pane-subhead{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  color:#ddcdb6;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.map-pane-head{
+  min-height:31px;
+  padding:2px 1px 6px;
+  border-bottom:1px solid rgba(212,178,122,.10);
+  font-size:10.5px;
+}
+.map-pane-subhead{font-size:9px;padding-top:3px}
+.map-panel-pane>.map-config-body{padding:0!important}
+
+/* Reducido = no reserva anchura. El botón queda sobre el mapa. */
+.map-edit-panel.collapsed{
+  flex-basis:0!important;
+  width:0!important;
+  min-width:0!important;
+  border-right:0!important;
+  box-shadow:none!important;
+  background:transparent!important;
+}
+.map-edit-panel.collapsed .map-side-panel-scroll,
+.map-edit-panel.collapsed .map-panel-tabs{display:none!important}
+.map-edit-panel.collapsed .map-panel-collapse{
+  right:-36px!important;
+  top:9px!important;
+  width:28px!important;
+  height:28px!important;
+  background:rgba(35,31,39,.94)!important;
+  box-shadow:0 4px 12px rgba(0,0,0,.28);
+}
+.place-map-workspace.panel-collapsed .place-map-main{flex:1 1 100%!important}
+
+/* Crear Ruta: selector simple Línea, sin ventana emergente. */
+.route-line-check,.route-mode-checkbox{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  min-height:27px;
+  padding:4px 7px;
+  border:1px solid rgba(212,178,122,.11);
+  border-radius:7px;
+  color:#b9a486;
+  background:rgba(38,42,51,.40);
+  font-size:8px;
+}
+.route-line-check input,.route-mode-checkbox input{accent-color:#b99561}
+.map-route-create,.map-route-create-menu{display:none!important}
+.map-route-generator-inline{
+  display:grid;
+  gap:7px;
+  margin-top:4px;
+  padding:8px;
+  border:1px solid rgba(212,178,122,.10);
+  border-radius:8px;
+  background:rgba(26,31,38,.54);
+}
+
+/* Preview de creación: línea/zona y todos los nodos visibles. */
+.map-tool-preview{
+  stroke:#f2c977!important;
+  stroke-width:.42px!important;
+  stroke-dasharray:1.1 .7!important;
+  fill:none;
+  vector-effect:non-scaling-stroke;
+  pointer-events:none;
+}
+.map-tool-zone-preview{
+  fill:rgba(242,201,119,.20)!important;
+  stroke:#f2c977!important;
+}
+.map-tool-node{
+  fill:#fff2cf;
+  stroke:#5d4528;
+  stroke-width:.22px;
+  vector-effect:non-scaling-stroke;
+  pointer-events:none;
+}
+.map-tool-node.first{
+  fill:#f2c977;
+  stroke:#2f2418;
+  stroke-width:.32px;
+}
+
+/* Controles de vista con símbolos; el actual queda bloqueado. */
+.map-view-icon{
+  width:29px;
+  min-width:29px;
+  padding:5px 0!important;
+  font-size:12px!important;
+}
+.map-bottom-controls .map-compact-btn:disabled{
+  opacity:.42!important;
+  cursor:default!important;
+  border-color:rgba(212,178,122,.08)!important;
+}
+
+/* El panel puede desplazarse sin que su rueda se use para zoom del mapa. */
+.map-side-panel{overscroll-behavior:contain}
+.map-side-panel-scroll{overscroll-behavior:contain}
+
+/* El color debe sentirse inmediato incluso antes del guardado. */
+.map-color{cursor:pointer}
+
+@media(max-width:680px){
+  .map-edit-panel.collapsed{flex-basis:0!important;width:0!important}
+  .map-edit-panel.collapsed .map-panel-collapse{right:-34px!important}
+}
+
+
+/* A6.7.7 — Pestaña/Pantalla se mantienen durante edición y movimiento */
+#characterTabPanel:fullscreen{
+  width:100vw!important;
+  height:100vh!important;
+  margin:0!important;
+  padding:0!important;
+  background:#0b0f14!important;
+  overflow:hidden!important;
+}
+#characterTabPanel:fullscreen .place-map-viewport{
+  width:100vw!important;
+  height:100vh!important;
+  max-height:none!important;
+  min-height:0!important;
+  border:0!important;
+  border-radius:0!important;
+  padding:0!important;
+  background:#0b0f14!important;
+}
+#characterTabPanel:fullscreen .place-map-workspace,
+#characterTabPanel:fullscreen .place-map-main{
+  width:100%!important;
+  height:100%!important;
+}
+#characterTabPanel:fullscreen .place-map-canvas{
+  width:min(100%,1500px)!important;
+  max-width:none!important;
+}
+
+/* El modo elegido manda; no hay transición visual que lo desactive al mover elementos. */
+.place-map-viewport.map-tab-mode{
+  display:block!important;
+}
