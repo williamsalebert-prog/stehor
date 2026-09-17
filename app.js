@@ -2696,83 +2696,108 @@
   }
 
 
-  function elementInfoBlocks(el){
-    return Array.isArray(el?.infoBlocks)?el.infoBlocks:[];
+
+  function elementInfoDoc(el){
+    el.infoDoc ||= {intro:{body:"",media:[]},sections:[]};
+    el.infoDoc.intro ||= {body:"",media:[]};
+    el.infoDoc.intro.media ||= [];
+    el.infoDoc.sections ||= [];
+
+    // Migración conservadora del editor anterior, sin perder texto/imágenes.
+    if(!el.infoDocMigrated){
+      const old=Array.isArray(el.infoBlocks)?el.infoBlocks:[];
+      if(old.length){
+        let target=el.infoDoc.intro;
+        for(const block of old){
+          if(block?.type==="title"||block?.type==="subtitle"){
+            const section={level:block.type,title:block.text||"",body:"",media:[]};
+            el.infoDoc.sections.push(section);
+            target=section;
+          }else if(block?.type==="media"&&block.item?.src){
+            block.item.position=["left","right","center"].includes(block.item.position)?block.item.position:"center";
+            block.item.size=Number(block.item.size)||34;
+            target.media.push(block.item);
+          }else if(block?.text){
+            target.body+=(target.body?"\n\n":"")+block.text;
+          }
+        }
+      }
+      if(Array.isArray(el.media)&&el.media.length && !el.infoDoc.intro.media.length){
+        el.infoDoc.intro.media.push(...el.media);
+      }
+      el.infoDocMigrated=true;
+    }
+    return el.infoDoc;
+  }
+
+  function elementInfoBasePath(e,m,el){
+    const mi=placeData(e).maps.indexOf(m);
+    const ei=m.elements.indexOf(el);
+    return `place.maps.${mi}.elements.${ei}.infoDoc`;
   }
 
 
   function renderElementInfoRead(el,e){
-    const blocks=elementInfoBlocks(el);
-    if(!blocks.length)return "";
-    return `<div class="map-info-rich">${blocks.map(block=>{
-      if(block.type==="title")return block.text?`<h3>${linkifyText(block.text,e.id)}</h3>`:"";
-      if(block.type==="subtitle")return block.text?`<h4>${linkifyText(block.text,e.id)}</h4>`:"";
-      if(block.type==="media"){
-        const item=block.item||{};
-        const pos=["left","right","center"].includes(item.position)?item.position:"center";
-        const size=Math.max(18,Math.min(92,Number(item.size)||42));
-        return item.src?`<figure class="element-info-media-read pos-${pos}" style="--element-media-size:${size}%">${renderMediaElement(item)}${item.caption?`<figcaption>${esc(item.caption)}</figcaption>`:""}</figure>`:"";
-      }
-      return block.text?`<p>${linkifyText(block.text,e.id)}</p>`:"";
-    }).join("")}<div class="element-info-clear"></div></div>`;
+    const m=activePlaceMap(e);
+    if(!m)return "";
+    const doc=elementInfoDoc(el);
+    const base=elementInfoBasePath(e,m,el);
+
+    return `<div class="character-content-stack map-element-description-copy readonly-copy">
+      <section class="character-intro-card media-aware-block">
+        ${renderRichFlow(doc.intro.body||"",`${base}.intro.body`,doc.intro.media,`${base}.intro.media`,e)}
+      </section>
+      ${doc.sections.map((s,i)=>{
+        s.media ||= [];
+        return `<section class="character-section media-aware-block">
+          ${s.title?`<div class="section-title-row"><h2>${esc(s.title)}</h2></div>`:""}
+          ${renderRichFlow(s.body||"",`${base}.sections.${i}.body`,s.media,`${base}.sections.${i}.media`,e)}
+        </section>`;
+      }).join("")}
+    </div>`;
   }
 
+  function renderElementInfoEditor(e,m,el){
+    const doc=elementInfoDoc(el);
+    const base=elementInfoBasePath(e,m,el);
 
-  function renderElementInfoEditor(m,el){
-    const blocks=elementInfoBlocks(el);
-    return `<div class="element-info-editor wiki-like-element-editor">
-      <div class="map-mini-head"><strong>Texto / explicación</strong></div>
-      <div class="element-info-add-row">
-        <button class="tiny-map-btn" data-add-info-block="paragraph" data-info-owner="${el.id}">＋ Texto</button>
-        <button class="tiny-map-btn" data-add-info-block="title" data-info-owner="${el.id}">＋ Título</button>
-        <button class="tiny-map-btn" data-add-info-block="subtitle" data-info-owner="${el.id}">＋ Subtítulo</button>
-        <button class="tiny-map-btn" data-add-info-media="${el.id}">＋ Multimedia</button>
-      </div>
-      ${blocks.length?`<div class="element-info-blocks">${blocks.map((block,bi)=>{
-        if(block.type==="media"){
-          const item=block.item||{};
-          if(item.position==="row")item.position="center";
-          item.position=["left","right","center"].includes(item.position)?item.position:"center";
-          item.size=Math.max(18,Math.min(92,Number(item.size)||42));
-          const limits=mediaRange(item,item.position)||mediaRange(item,"center")||[18,92];
-          const min=Math.max(18,Math.floor(limits[0])),max=Math.max(min,Math.min(92,Math.ceil(limits[1])));
-          const size=Math.max(min,Math.min(max,item.size));
-          return `<div class="element-info-block media-block pos-${item.position}" style="--element-media-size:${size}%">
-            <button class="element-info-remove" data-remove-info-block="${bi}" data-info-owner="${el.id}" title="Quitar">×</button>
-            <figure>${item.src?renderMediaElement(item):`<div class="empty small">Archivo no disponible</div>`}</figure>
-            <div class="element-info-media-controls">
-              <button class="${item.position==="left"?"active":""}" data-info-media-position="left" data-info-owner="${el.id}" data-info-index="${bi}" title="Izquierda">←</button>
-              <button class="${item.position==="center"?"active":""}" data-info-media-position="center" data-info-owner="${el.id}" data-info-index="${bi}" title="Centro">•</button>
-              <button class="${item.position==="right"?"active":""}" data-info-media-position="right" data-info-owner="${el.id}" data-info-index="${bi}" title="Derecha">→</button>
-              <input type="range" min="${min}" max="${max}" step="2" value="${size}" data-info-media-size="${bi}" data-info-owner="${el.id}" aria-label="Tamaño">
-            </div>
-            <div class="element-info-caption direct-edit" contenteditable="true" spellcheck="true" data-info-media-caption="${bi}" data-info-owner="${el.id}" data-placeholder="Pie opcional">${esc(item.caption||"")}</div>
-          </div>`;
-        }
+    return `<div class="character-content-stack map-element-description-copy">
+      <section class="character-intro-card media-aware-block">
+        ${renderRichFlow(doc.intro.body||"",`${base}.intro.body`,doc.intro.media,`${base}.intro.media`,e)}
+        ${editMode?`<button class="inline-add-media edit-only" data-add-media="${base}.intro.media" data-media-text-path="${base}.intro.body">＋ Multimedia</button>`:""}
+      </section>
 
-        const tag=block.type==="title"?"h3":block.type==="subtitle"?"h4":"div";
-        const cls=block.type==="title"?"title-block":block.type==="subtitle"?"subtitle-block":"paragraph-block";
-        const placeholder=block.type==="title"?"Título":block.type==="subtitle"?"Subtítulo":"Texto";
-        return `<div class="element-info-block ${cls}">
-          <button class="element-info-remove" data-remove-info-block="${bi}" data-info-owner="${el.id}" title="Quitar">×</button>
-          <${tag} class="element-info-direct-text" contenteditable="true" spellcheck="true" data-info-block-edit="${bi}" data-info-owner="${el.id}" data-placeholder="${placeholder}">${esc(block.text||"")}</${tag}>
-        </div>`;
-      }).join("")}</div>`:`<div class="empty small">Sin explicación todavía.</div>`}
+      ${doc.sections.map((s,i)=>{
+        s.media ||= [];
+        return richSection(e,{
+          title:s.title||"",
+          titlePath:`${base}.sections.${i}.title`,
+          path:`${base}.sections.${i}.body`,
+          mediaPath:`${base}.sections.${i}.media`,
+          removeAction:`data-remove-element-info-section="${i}" data-info-owner="${el.id}"`
+        });
+      }).join("")}
+
+      ${editMode?`<div class="element-info-section-actions">
+        <button class="section-add edit-only" data-add-element-info-section="title" data-info-owner="${el.id}">＋ Título</button>
+        <button class="section-add edit-only" data-add-element-info-section="subtitle" data-info-owner="${el.id}">＋ Subtítulo</button>
+      </div>`:""}
     </div>`;
   }
 
   function mapElementHasInfo(m,el){
     if(!el)return false;
-    const hasBlocks=elementInfoBlocks(el).some(b=>b.type==="media"?!!b.item?.src:!!String(b.text||"").trim());
+    const doc=elementInfoDoc(el);
+    const hasIntro=!!String(doc.intro?.body||"").trim()||toArray(doc.intro?.media).some(x=>x?.src);
+    const hasSections=toArray(doc.sections).some(s=>!!String(s?.title||"").trim()||!!String(s?.body||"").trim()||toArray(s?.media).some(x=>x?.src));
     const meaningfulName=!!String(el.name||"").trim()&&!/^Nuev[oa] (punto|zona|ruta|línea)$/i.test(String(el.name||""));
     const hasArticle=!!mapLinkedEntity(el);
     if(el.kind==="route"&&(el.routeMode||"route")==="route"){
-      const travel=!!(el.transport||el.fixedSpeed||el.durationManual||el.departure||el.arrival||el.originPointId||el.destinationPointId);
-      return hasBlocks||meaningfulName||travel||hasArticle;
+      const travel=!!(el.transport||el.fixedSpeed||el.durationManual||el.originPointId||el.destinationPointId);
+      return hasIntro||hasSections||meaningfulName||travel||hasArticle;
     }
-    return hasBlocks||meaningfulName||hasArticle;
+    return hasIntro||hasSections||meaningfulName||hasArticle;
   }
-
 
   function renderMapInfoPanel(e,m){
     if(editMode)return "";
@@ -2806,7 +2831,6 @@
       : renderMapGlobalSettings(m);
 
     return `<aside class="map-side-panel map-edit-panel ${view.panelCollapsed?"collapsed":""}" data-map-side-panel>
-      <button class="map-panel-collapse" data-map-panel-collapse title="${view.panelCollapsed?"Abrir panel":"Reducir panel"}">${view.panelCollapsed?"›":"‹"}</button>
       <div class="map-panel-tabs" role="tablist" aria-label="Herramientas del mapa">
         <button class="map-panel-tab ${tab==="elements"?"active":""}" data-map-panel-tab="elements" title="Elementos" aria-label="Elementos">◇</button>
         <button class="map-panel-tab ${tab==="selected"?"active":""}" data-map-panel-tab="selected" title="Elemento seleccionado" aria-label="Elemento seleccionado">◎</button>
@@ -2839,14 +2863,17 @@
     const view=currentMapView(m);
     const tabClass=view.displayMode==="tab"?" map-tab-mode":"";
     const side=editMode?renderMapEditSidebar(e,m):renderMapInfoPanel(e,m);
+    const collapsedClass=editMode&&view.panelCollapsed?" panel-collapsed":"";
+    const panelToggle=editMode?`<button class="map-panel-toggle-overlay" data-map-panel-collapse title="${view.panelCollapsed?"Abrir panel":"Reducir panel"}" aria-label="${view.panelCollapsed?"Abrir panel":"Reducir panel"}">${view.panelCollapsed?"›":"‹"}</button>`:"";
     if(!img?.src){
-      return `<div class="place-map-viewport${tabClass}" data-map-viewport><div class="place-map-workspace ${side?"has-side-panel":""}">${side}<div class="place-map-main">${renderPlaceMapTabs(e,m)}<div class="place-map-empty"><div>${icon("lugares")}</div><p>Sin imagen base.</p>${editMode?`<button class="map-action" data-map-load-image>＋ Cargar imagen base</button>`:""}</div>${renderMapBottomControls(m)}</div></div></div>`;
+      return `<div class="place-map-viewport${tabClass}" data-map-viewport><div class="place-map-workspace ${side?"has-side-panel":""}${collapsedClass}">${side}${panelToggle}<div class="place-map-main">${renderPlaceMapTabs(e,m)}<div class="place-map-empty"><div>${icon("lugares")}</div><p>Sin imagen base.</p>${editMode?`<button class="map-action" data-map-load-image>＋ Cargar imagen base</button>`:""}</div>${renderMapBottomControls(m)}</div></div></div>`;
     }
     const ratio=(Number(img.width)>0&&Number(img.height)>0)?`${img.width}/${img.height}`:"16/9";
     const els=renderMapElementsSvg(m);
     return `<div class="place-map-viewport${tabClass}" data-map-viewport>
-      <div class="place-map-workspace ${side?"has-side-panel":""}">
+      <div class="place-map-workspace ${side?"has-side-panel":""}${collapsedClass}">
         ${side}
+        ${panelToggle}
         <div class="place-map-main">
           ${renderPlaceMapTabs(e,m)}
           <div class="place-map-canvas" data-map-canvas style="aspect-ratio:${ratio};transform:translate(${view.panX}px,${view.panY}px) scale(${view.zoom})">
@@ -3163,7 +3190,7 @@
     </div>`;
   }
 
-  function renderCommonElementFields(m,el){
+  function renderCommonElementFields(e,m,el){
     const i=m.elements.indexOf(el);
     const assigned=toArray(el.layerIds).map(id=>m.layers.find(l=>l.id===id)).filter(Boolean);
     const available=m.layers.filter(l=>!el.layerIds?.includes(l.id));
@@ -3182,7 +3209,7 @@
     </div>
     ${layerPicker}
     ${renderMapElementArticleLink(el)}
-    ${renderElementInfoEditor(m,el)}`;
+    ${renderElementInfoEditor(e,m,el)}`;
   }
 
 
@@ -3288,7 +3315,7 @@
     return `<section class="map-panel-pane" data-map-pane="selected">
       <div class="map-pane-head"><strong>${esc(el.name||"Elemento")}</strong></div>
       <div class="map-config-body">
-        ${renderCommonElementFields(m,el)}
+        ${renderCommonElementFields(e,m,el)}
         ${el.kind==="point"?renderPointSpecific(m,el):el.kind==="zone"?renderZoneSpecific(m,el):renderRouteSpecific(m,el)}
       </div>
     </section>`;
@@ -3856,6 +3883,7 @@
       workspace?.classList.toggle('panel-collapsed',v.panelCollapsed);
       ev.currentTarget.textContent=v.panelCollapsed?'›':'‹';
       ev.currentTarget.title=v.panelCollapsed?'Abrir panel':'Reducir panel';
+      ev.currentTarget.setAttribute('aria-label',v.panelCollapsed?'Abrir panel':'Reducir panel');
     });
     $('[data-close-map-info]')?.addEventListener('click',ev=>{ev.stopPropagation();activeMapInfoElementId="";refreshPlaceTab(e)});
     $$('[data-open-map-article]').forEach(btn=>btn.onclick=()=>{
@@ -3986,42 +4014,18 @@
       };
     });
 
-    $$('[data-add-info-block]').forEach(btn=>btn.onclick=async()=>{
+    $$('[data-add-element-info-section]').forEach(btn=>btn.onclick=async()=>{
       const el=placeMapElement(m,btn.dataset.infoOwner);if(!el)return;
-      el.infoBlocks||=[];el.infoBlocks.push({type:btn.dataset.addInfoBlock||"paragraph",text:""});
+      const doc=elementInfoDoc(el);
+      const isSubtitle=btn.dataset.addElementInfoSection==="subtitle";
+      doc.sections.push({level:isSubtitle?"subtitle":"title",title:isSubtitle?"Nuevo subtítulo":"Nuevo título",body:"",media:[]});
       await saveEntityDirect(e);refreshPlaceTab(e);
     });
-    $$('[data-add-info-media]').forEach(btn=>btn.onclick=async()=>{
-      const el=placeMapElement(m,btn.dataset.addInfoMedia);if(!el)return;
-      const items=await chooseMediaMany();if(!items.length)return;
-      el.infoBlocks||=[];for(const item of items){item.position=item.position||"center";item.size=Number(item.size)||42;el.infoBlocks.push({type:"media",item})}
-      await saveEntityDirect(e);refreshPlaceTab(e);
-    });
-    $$('[data-remove-info-block]').forEach(btn=>btn.onclick=async()=>{
+    $$('[data-remove-element-info-section]').forEach(btn=>btn.onclick=async()=>{
       const el=placeMapElement(m,btn.dataset.infoOwner);if(!el)return;
-      el.infoBlocks||=[];el.infoBlocks.splice(Number(btn.dataset.removeInfoBlock),1);
+      const doc=elementInfoDoc(el);
+      doc.sections.splice(Number(btn.dataset.removeElementInfoSection),1);
       await saveEntityDirect(e);refreshPlaceTab(e);
-    });
-    $$('[data-info-block-edit]').forEach(node=>node.onblur=async()=>{
-      const el=placeMapElement(m,node.dataset.infoOwner);const block=el?.infoBlocks?.[Number(node.dataset.infoBlockEdit)];if(!block)return;
-      block.text=(node.innerText||"").trim();await saveEntityDirect(e);
-    });
-    $$('[data-info-media-caption]').forEach(node=>node.onblur=async()=>{
-      const el=placeMapElement(m,node.dataset.infoOwner);const block=el?.infoBlocks?.[Number(node.dataset.infoMediaCaption)];if(!block?.item)return;
-      block.item.caption=(node.innerText||"").trim();await saveEntityDirect(e);
-    });
-    $$('[data-info-media-position]').forEach(btn=>btn.onclick=async()=>{
-      const el=placeMapElement(m,btn.dataset.infoOwner);const block=el?.infoBlocks?.[Number(btn.dataset.infoIndex)];if(!block?.item)return;
-      block.item.position=btn.dataset.infoMediaPosition||"center";await saveEntityDirect(e);refreshPlaceTab(e);
-    });
-    $$('[data-info-media-size]').forEach(range=>{
-      range.oninput=()=>{
-        const card=range.closest('.media-block');if(card)card.style.setProperty('--element-media-size',`${range.value}%`);
-      };
-      range.onchange=async()=>{
-        const el=placeMapElement(m,range.dataset.infoOwner);const block=el?.infoBlocks?.[Number(range.dataset.infoMediaSize)];if(!block?.item)return;
-        block.item.size=Number(range.value)||42;await saveEntityDirect(e);
-      };
     });
 
     $$('[data-element-article-enabled]').forEach(input=>input.onchange=async()=>{

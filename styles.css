@@ -2552,3 +2552,151 @@ body.edit-mode .inline-edit-mode-toggle{
 #characterTabPanel:fullscreen .map-bottom-controls{
   display:flex!important;
 }
+
+
+/* A6.8.4 — toggle del panel independiente del sidebar */
+.place-map-workspace{
+  --map-edit-panel-width:465px;
+}
+.map-panel-toggle-overlay{
+  position:absolute!important;
+  z-index:1000!important;
+  top:10px!important;
+  left:calc(var(--map-edit-panel-width) - 36px)!important;
+  width:28px!important;
+  height:28px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+  border:1px solid rgba(212,178,122,.22)!important;
+  border-radius:7px!important;
+  background:rgba(35,31,39,.96)!important;
+  color:#dfbf8d!important;
+  box-shadow:0 4px 14px rgba(0,0,0,.32)!important;
+  cursor:pointer!important;
+}
+.place-map-workspace.panel-collapsed .map-panel-toggle-overlay{
+  left:8px!important;
+}
+.place-map-viewport.map-tab-mode .map-panel-toggle-overlay,
+#characterTabPanel:fullscreen .map-panel-toggle-overlay{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+  z-index:1200!important;
+}
+
+/* El botón viejo interno deja de tener cualquier efecto si queda CSS histórico. */
+.map-edit-panel .map-panel-collapse{display:none!important}
+
+@media(max-width:1100px){
+  .place-map-workspace{--map-edit-panel-width:420px}
+}
+@media(max-width:760px){
+  .place-map-workspace{--map-edit-panel-width:330px}
+}
+
+
+/* A6.8.5 — el toggle del panel y las pestañas del mapa no se pisan */
+.place-map-workspace.panel-collapsed .map-panel-toggle-overlay{
+  left:8px!important;
+  top:8px!important;
+}
+.place-map-workspace.panel-collapsed .place-map-subtabs.map-tabs-overlay{
+  left:44px!important;
+  max-width:calc(100% - 52px)!important;
+}
+
+/* El editor del elemento usa exactamente el rich-flow de Personajes/Lugares. */
+.map-element-rich-editor{
+  display:grid;
+  gap:10px;
+}
+.map-element-rich-editor .character-section{
+  margin:0!important;
+}
+.map-element-rich-editor .rich-content-flow{
+  min-height:38px;
+}
+.map-element-rich-editor .character-prose{
+  font-size:10px!important;
+  line-height:1.58!important;
+}
+.map-element-rich-editor .embedded-media{
+  max-width:100%;
+}
+.map-element-rich-editor .section-title-row h2{
+  font-size:17px!important;
+}
+.map-element-rich-editor .section-title-row h3{
+  margin:0;
+  font:700 13px Georgia,"Times New Roman",serif;
+  color:#d8c4a6;
+}
+.element-info-section-actions{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.map-element-rich-editor .inline-add-media{
+  margin-top:7px;
+}
+.map-info-rich-unified .rich-content-flow{
+  margin-bottom:8px;
+}
+.map-info-wiki-section>h3,
+.map-info-wiki-section>h4{
+  margin:8px 0 5px;
+  color:#e5d2b5;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.map-info-wiki-section>h3{font-size:15px}
+.map-info-wiki-section>h4{font-size:12px}
+
+.element-info-media-controls,
+.element-info-add-row,
+.element-info-blocks{
+  /* obsolete A6.8.2 custom editor; new renderer no longer emits these */
+}
+
+
+/* A6.8.6 — el editor de Punto/Zona/Ruta hereda literalmente el aspecto
+   y comportamiento de Descripción/Historia de Personajes y Lugares. */
+.map-element-description-copy{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:14px!important;
+}
+.map-element-description-copy .character-intro-card,
+.map-element-description-copy .character-section{
+  width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+}
+.map-element-description-copy .rich-content-flow,
+.map-element-description-copy .character-prose,
+.map-element-description-copy .embedded-media,
+.map-element-description-copy .media-controls,
+.map-element-description-copy .media-size,
+.map-element-description-copy .inline-add-media{
+  /* sin overrides propios: usan las reglas globales de Personajes/Lugares */
+}
+.map-element-description-copy.readonly-copy .character-intro-card{
+  padding:14px!important;
+}
+
+.map-element-rich-editor,
+.map-element-info-section,
+.map-element-intro-flow,
+.map-info-wiki-section,
+.element-info-section-actions{
+  all:unset;
+}
+.map-element-rich-editor,
+.element-info-section-actions{
+  display:block;
+}
