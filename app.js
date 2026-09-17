@@ -1462,7 +1462,7 @@
 
       if(range){
         let suggested=mediaRange(item,effective)||mediaRange(item,"center")||[18,96];
-        if(['left','right'].includes(effective)){
+        if(['left','right'].includes(effective) && !flowEl?.closest('.map-element-description-copy')){
           const dyn=sideMediaSizeLimits(flowEl,item,{mode:effective,anchor:Number(item.anchor)||0,offsetLines:Number(item.offsetLines)||0,offsetPx:Number(item.offsetPx)||0});
           suggested=[dyn.min,dyn.max];
         }
@@ -1470,7 +1470,7 @@
         const maxV=Math.max(minV,Math.min(96,Math.ceil(suggested[1])));
         if(stored<minV) stored=minV;
         if(stored>maxV) stored=maxV;
-        item.size=stored;
+        if(!flowEl?.closest('.map-element-description-copy')) item.size=stored;
         block.style.setProperty("--media-size",`${stored}%`);
         range.min=minV;
         range.max=maxV;
@@ -1647,7 +1647,8 @@
     // comprobación posterior que pueda anular su elección. Dejamos una franja
     // central estrecha para el bloque independiente.
     let mode='center';
-    if(width>=420 && sideShapeAllowed){
+    const minSideFlowWidth=flow.closest('.map-element-description-copy')?250:420;
+    if(width>=minSideFlowWidth && sideShapeAllowed){
       if(relativeX<=.44) mode='left';
       else if(relativeX>=.56) mode='right';
     }
@@ -3719,7 +3720,7 @@
     let pan=null;
     viewport.onpointerdown=ev=>{
       if(ev.button!==0)return;
-      if(ev.target.closest('[data-map-bottom-controls],[data-map-side-panel],.map-node-handle,[data-map-element]'))return;
+      if(ev.target.closest('[data-map-bottom-controls],[data-map-side-panel],[data-map-panel-collapse],.map-tabs-overlay,.map-node-handle,[data-map-element]'))return;
       if(editMode&&placeMapTool?.mapId===m.id)return;
       const v=currentMapView(m);
       pan={id:ev.pointerId,startX:ev.clientX,startY:ev.clientY,panX:v.panX,panY:v.panY,moved:false};
@@ -3875,7 +3876,12 @@
     $$('[data-map-zoom="reset"]').forEach(btn=>btn.onclick=()=>{const v=currentMapView(m);v.zoom=1;v.panX=0;v.panY=0;applyMapCanvasView(m)});
     wireMapViewportNavigation(m);
     wireMapStage(e,m);
-    $('[data-map-panel-collapse]')?.addEventListener('click',ev=>{
+    const panelToggle=$('[data-map-panel-collapse]');
+    panelToggle?.addEventListener('pointerdown',ev=>{
+      ev.stopPropagation();
+    });
+    panelToggle?.addEventListener('click',ev=>{
+      ev.preventDefault();
       ev.stopPropagation();
       const v=currentMapView(m);v.panelCollapsed=!v.panelCollapsed;
       const panel=$('[data-map-side-panel]'),workspace=$('.place-map-workspace');

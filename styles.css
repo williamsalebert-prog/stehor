@@ -2700,3 +2700,73 @@ body.edit-mode .inline-edit-mode-toggle{
 .element-info-section-actions{
   display:block;
 }
+
+
+/* A6.8.7 — adaptación mínima del MISMO editor de Personajes/Lugares
+   al panel lateral: no es un editor distinto. */
+.map-element-description-copy .rich-content-flow{
+  width:100%!important;
+  min-width:0!important;
+  overflow:visible!important;
+}
+.map-element-description-copy .rich-paragraph{
+  width:auto!important;
+  min-width:0!important;
+  overflow:visible!important;
+}
+
+/* En un panel de ~465 px también se permiten imágenes laterales. */
+@media(min-width:761px){
+  .map-element-description-copy .embedded-media.effective-left{
+    float:left!important;
+    margin:4px 12px 9px 0!important;
+    max-width:48%!important;
+  }
+  .map-element-description-copy .embedded-media.effective-right{
+    float:right!important;
+    margin:4px 0 9px 12px!important;
+    max-width:48%!important;
+  }
+}
+
+/* La barra es la misma, solo se comprime para que el slider nunca quede cortado. */
+.map-element-description-copy .embedded-media-frame .media-controls{
+  grid-template-columns:22px 22px minmax(54px,1fr) 22px!important;
+  gap:3px!important;
+  left:4px!important;
+  right:4px!important;
+  bottom:4px!important;
+  padding:4px!important;
+}
+.map-element-description-copy .media-controls .media-shift,
+.map-element-description-copy .media-controls .media-remove{
+  width:22px!important;
+  height:22px!important;
+  font-size:10px!important;
+}
+.map-element-description-copy .media-controls .media-size{
+  min-width:54px!important;
+  width:100%!important;
+}
+
+/* Si la imagen es muy estrecha, la barra puede sobresalir ligeramente en edición
+   en vez de desaparecer o recortar el slider. */
+body.edit-mode .map-element-description-copy .embedded-media-frame{
+  overflow:visible!important;
+}
+body.edit-mode .map-element-description-copy .embedded-media-frame .media-controls{
+  min-width:138px;
+  max-width:calc(100vw - 40px);
+}
+body.edit-mode .map-element-description-copy .embedded-media-frame img,
+body.edit-mode .map-element-description-copy .embedded-media-frame video{
+  border-radius:9px;
+  overflow:hidden;
+}
+
+/* El botón ‹/› siempre gana el clic sobre el mapa. */
+.map-panel-toggle-overlay{
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+  user-select:none!important;
+}
