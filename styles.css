@@ -2356,3 +2356,160 @@ body.edit-mode .inline-edit-mode-toggle{
   border-color:rgba(236,207,152,.42);
   background:linear-gradient(180deg,rgba(83,64,90,.68),rgba(39,60,72,.64));
 }
+
+
+/* A6.8.2 — en fullscreen el mapa queda limpio */
+#characterTabPanel:fullscreen .map-bottom-controls{
+  display:none!important;
+}
+
+
+/* A6.8.2 — el panel técnico de edición gana espacio real para texto/multimedia */
+.map-edit-panel{
+  flex-basis:465px!important;
+  width:465px!important;
+}
+@media(max-width:1100px){
+  .map-edit-panel{flex-basis:420px!important;width:420px!important}
+}
+@media(max-width:760px){
+  .map-edit-panel{flex-basis:330px!important;width:330px!important}
+}
+.map-edit-panel.collapsed{
+  flex-basis:0!important;
+  width:0!important;
+}
+
+/* Las pestañas de mapas ya no consumen una fila: flotan sobre el mapa. */
+.place-maps-shell{position:relative}
+.place-map-subtabs.map-tabs-overlay{
+  position:absolute!important;
+  z-index:90!important;
+  left:8px!important;
+  top:8px!important;
+  width:auto!important;
+  max-width:calc(100% - 16px)!important;
+  margin:0!important;
+  padding:4px!important;
+  border:1px solid rgba(212,178,122,.13)!important;
+  border-radius:8px!important;
+  background:rgba(11,15,20,.78)!important;
+  backdrop-filter:blur(4px);
+  box-shadow:0 5px 16px rgba(0,0,0,.20);
+}
+.place-map-main>.place-map-subtabs.map-tabs-overlay{
+  position:absolute!important;
+}
+.place-map-subtab{min-height:26px!important;padding:4px 8px!important;font-size:8px!important}
+.place-map-tab-remove{width:22px!important;height:22px!important}
+
+/* Editor de explicación más parecido al resto de la wiki. */
+.wiki-like-element-editor{
+  gap:9px!important;
+}
+.element-info-block{
+  background:rgba(14,19,25,.36)!important;
+}
+.element-info-direct-text{
+  min-height:1.5em;
+  outline:none;
+  color:#d3c4ae;
+  white-space:pre-wrap;
+}
+.element-info-direct-text:empty:before,
+.element-info-caption:empty:before{
+  content:attr(data-placeholder);
+  color:#776c5d;
+  pointer-events:none;
+}
+.element-info-block.title-block h3{
+  margin:0;
+  padding:3px 24px 6px 0;
+  font:700 17px Georgia,"Times New Roman",serif;
+  color:#eadac1;
+  border-bottom:1px solid rgba(212,178,122,.12);
+}
+.element-info-block.subtitle-block h4{
+  margin:0;
+  padding:3px 24px 4px 0;
+  font:700 13px Georgia,"Times New Roman",serif;
+  color:#d7c3a4;
+}
+.element-info-block.paragraph-block .element-info-direct-text{
+  padding:3px 24px 3px 0;
+  font-size:10px;
+  line-height:1.58;
+}
+.element-info-block.media-block{
+  width:var(--element-media-size,42%);
+  min-width:130px;
+  max-width:100%;
+}
+.element-info-block.media-block.pos-left{margin-right:auto}
+.element-info-block.media-block.pos-center{margin-left:auto;margin-right:auto}
+.element-info-block.media-block.pos-right{margin-left:auto}
+.element-info-block.media-block figure{margin:0}
+.element-info-block.media-block img,
+.element-info-block.media-block video{
+  display:block;
+  width:100%;
+  max-height:280px;
+  object-fit:contain;
+  border-radius:7px;
+  background:#0c1015;
+}
+.element-info-media-controls{
+  display:grid;
+  grid-template-columns:26px 26px 26px minmax(100px,1fr);
+  gap:5px;
+  align-items:center;
+  margin-top:6px;
+}
+.element-info-media-controls button{
+  height:24px;
+  border:1px solid rgba(212,178,122,.12);
+  border-radius:6px;
+  background:rgba(29,33,40,.78);
+  color:#b9a486;
+  cursor:pointer;
+}
+.element-info-media-controls button.active{
+  color:#f0d6ad;
+  background:rgba(78,58,83,.62);
+  border-color:rgba(212,178,122,.28);
+}
+.element-info-media-controls input{width:100%;accent-color:#b99561}
+.element-info-caption{
+  margin-top:5px;
+  min-height:1.4em;
+  outline:none;
+  text-align:center;
+  color:#9f8c73;
+  font-size:8px;
+}
+
+/* Lectura en modo Listo: posición/tamaño guardados de la multimedia. */
+.map-info-rich .element-info-media-read{
+  width:var(--element-media-size,42%);
+  max-width:100%;
+  margin:4px 0 8px;
+}
+.map-info-rich .element-info-media-read.pos-left{float:left;margin-right:10px}
+.map-info-rich .element-info-media-read.pos-right{float:right;margin-left:10px}
+.map-info-rich .element-info-media-read.pos-center{float:none;margin-left:auto;margin-right:auto}
+.element-info-clear{clear:both;height:0}
+
+/* Handles: el hit area es transparente; el punto visible va aparte. */
+.map-node-handle{
+  fill:transparent!important;
+  stroke:transparent!important;
+  cursor:grab!important;
+  vector-effect:non-scaling-stroke;
+}
+.map-node-dot{
+  pointer-events:none;
+  vector-effect:non-scaling-stroke;
+}
+
+/* Forma avanzada queda fuera de la interfaz actual. */
+.map-advanced-shape{display:none!important}
