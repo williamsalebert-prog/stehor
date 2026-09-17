@@ -2513,3 +2513,42 @@ body.edit-mode .inline-edit-mode-toggle{
 
 /* Forma avanzada queda fuera de la interfaz actual. */
 .map-advanced-shape{display:none!important}
+
+
+/* A6.8.3 — el botón para reabrir el panel nunca desaparece */
+.place-map-workspace{
+  overflow:visible!important;
+}
+.map-edit-panel{
+  overflow:visible!important;
+}
+.map-edit-panel.collapsed{
+  overflow:visible!important;
+  position:relative!important;
+  z-index:120!important;
+}
+.map-edit-panel.collapsed .map-panel-collapse{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+  position:absolute!important;
+  right:-36px!important;
+  top:9px!important;
+  z-index:160!important;
+}
+
+/* En Pestaña y Pantalla completa el botón > sigue encima del mapa. */
+.place-map-viewport.map-tab-mode .map-edit-panel.collapsed .map-panel-collapse,
+#characterTabPanel:fullscreen .map-edit-panel.collapsed .map-panel-collapse{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+  z-index:200!important;
+}
+
+/* Los controles de vista siguen disponibles también en Pantalla completa. */
+#characterTabPanel:fullscreen .map-bottom-controls{
+  display:flex!important;
+}
