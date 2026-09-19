@@ -1,0 +1,51 @@
+AUDITORÍA FUNCIONAL — SETHORIA WRITER V5
+
+Fecha: 2026-09-19
+Base auditada: Sethoria Writer Modular V4
+
+1. PROBLEMAS ENCONTRADOS
+- index.html cargaba configuraciones de módulos que ya no existían (arcos, relaciones, armas, ropa, historia-real, reglas, informacion-general, musica, fuentes, otros, notas). Esto provocaba solicitudes 404.
+- La navegación principal todavía mostraba categorías que ya habían sido consolidadas: armas/ropa, criaturas mágicas/reales, culturas, relaciones, etc.
+- Los nuevos contratos de Objetos, Información, Grupos y Criaturas no eran usados realmente por el runtime heredado: BLUEPRINTS seguía usando la estructura antigua.
+- Las fichas genéricas no tenían edición equivalente al sistema de Personajes/Lugares: el botón Editar/Listo aparecía, pero el contenido genérico no quedaba conectado a editores directos.
+
+2. CORRECCIONES APLICADAS
+- Eliminadas las referencias a scripts inexistentes y cargados únicamente módulos que existen físicamente.
+- Navegación actualizada a los contenedores consolidados: Grupos, Criaturas, Objetos e Información.
+- Se mantuvieron Rutas y Barcos accesibles porque su consolidación con Lugares queda pendiente y no se modificó su módulo.
+- BLUEPRINTS actualizado para:
+  * Grupos: Descripción, Real, Participación, Galería, Investigación.
+  * Objetos: Descripción, Participación, Galería, Investigación.
+  * Información: Descripción, Participación, Galería, Investigación.
+  * Criaturas: Descripción, Real, Participación, Galería, Investigación.
+- Añadido editor genérico reutilizando la infraestructura existente de texto enriquecido y multimedia.
+- En modo Editar, las fichas genéricas pueden editar descripción, texto, pies de imagen, galería y contenido de Real cuando corresponda.
+- Objetos conservan el contrato de Tabla rápida sin pestaña Real.
+- Información conserva el contrato de sin Tabla rápida y sin Real.
+- Grupos conserva Tabla rápida + Real.
+
+3. EDICIÓN TEXTO + MULTIMEDIA
+- Se reutiliza el flujo multimedia existente del runtime, incluyendo imágenes/GIF/video compatibles, tamaño, desplazamiento y eliminación.
+- La descripción genérica utiliza el mismo mecanismo de texto + multimedia integrado empleado por los sistemas de Personajes/Lugares.
+- El modo normal no deja elementos editables activos.
+- El modo Editar muestra controles y permite guardar mediante IndexedDB.
+
+4. VALIDACIONES AUTOMÁTICAS
+- node --check correcto para app.js, core/app-legacy.js, data/app-data.js y todos los JS de módulos.
+- Todas las etiquetas <script> de index.html apuntan ahora a archivos existentes.
+- Se revisaron referencias a categorías antiguas; permanecen algunas dentro del runtime como compatibilidad interna para relaciones y módulos todavía pendientes de consolidación, pero no forman parte de la navegación nueva.
+
+5. PRUEBA DE NAVEGADOR
+- Se intentó una prueba headless con Chromium para detectar errores de consola, carga y renderizado.
+- El entorno de ejecución bloqueó la navegación local del navegador (ERR_BLOCKED_BY_ADMINISTRATOR), por lo que no se puede afirmar que se haya completado una prueba visual real dentro de Chromium desde este entorno.
+- Por ello, esta auditoría certifica validación estática y de integración del código, pero no sustituye una prueba manual en un navegador normal.
+
+6. RIESGOS/PENDIENTES
+- La consolidación futura de Barcos/Rutas dentro de Lugares todavía está pendiente.
+- La consolidación futura de Culturas dentro de Grupos todavía está pendiente.
+- Eventos/Batallas y Cronología requieren una revisión posterior conjunta; Cronología permanece protegida.
+- El contenido específico de Real para cada subcategoría de Grupos sigue deliberadamente sin definir.
+- La pestaña Real de Criaturas conserva su estructura provisional hasta que se decida su contenido definitivo.
+
+7. CONCLUSIÓN
+La V5 elimina los fallos de referencias rotas detectados en V4 y conecta los nuevos módulos consolidados con el runtime existente. Personajes y Lugares se mantienen intactos en su arquitectura especial. La infraestructura de edición común queda reutilizada para Objetos, Información, Grupos y Criaturas sin convertirlos en módulos completamente independientes.

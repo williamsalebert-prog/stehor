@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#120d0a" />
-  <title>Sethoria Atlas — Plantilla 0</title>
+  <title>Sethoria Writer — Atlas para escritores</title>
   <link rel="stylesheet" href="styles.css?v=a688" />
 </head>
 <body>
@@ -14,8 +14,8 @@
         <button id="brandHome" class="home-main" aria-label="Ir al inicio" title="Inicio">
           <span class="brand-s">S</span>
           <span class="home-copy">
-            <strong>Sethoria Atlas</strong>
-            <small>Inicio</small>
+            <strong>Sethoria Writer</strong>
+            <small>Escritorio del escritor</small>
           </span>
         </button>
       </div>
@@ -23,6 +23,11 @@
       <nav id="categoryNav" class="category-nav" aria-label="Categorías"></nav>
 
       <div class="sidebar-tools">
+        <div class="sidebar-label">Escritura</div>
+        <button id="manuscriptBtn" class="nav-item" data-nav="manuscrito" title="Manuscrito">
+          <span class="nav-svg" data-icon="notas"></span>
+          <span class="nav-text">Manuscrito</span>
+        </button>
         <div class="sidebar-label">Herramientas</div>
         <button id="registryBtn" class="nav-item" data-nav="registry" title="Registro maestro">
           <span class="nav-svg" data-icon="registry"></span>
@@ -58,6 +63,38 @@
 <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="data/app-data.js?v=a662"></script>
-  <script src="app.js?v=a688"></script>
+  <!-- Contrato visual común para todos los módulos. -->
+  <script src="modules/_comun/template-contract.js?v=1"></script>
+  <script src="modules/_comun/module-template.js?v=1"></script>
+  <!-- Configuración y entradas de módulos actualmente existentes. -->
+  <script src="modules/personajes/config.js?v=2"></script>
+  <script src="modules/personajes/module.js?v=2"></script>
+  <script src="modules/lugares/config.js?v=2"></script>
+  <script src="modules/lugares/module.js?v=2"></script>
+  <script src="modules/grupos/config.js?v=2"></script>
+  <script src="modules/grupos/module.js?v=2"></script>
+  <script src="modules/informacion/config.js?v=2"></script>
+  <script src="modules/informacion/module.js?v=2"></script>
+  <script src="modules/objetos/config.js?v=2"></script>
+  <script src="modules/objetos/module.js?v=2"></script>
+  <script src="modules/criaturas/config.js?v=2"></script>
+  <script src="modules/criaturas/module.js?v=2"></script>
+  <script src="modules/eventos/config.js?v=2"></script>
+  <script src="modules/eventos/module.js?v=2"></script>
+  <script src="modules/batallas/config.js?v=2"></script>
+  <script src="modules/batallas/module.js?v=2"></script>
+  <script src="modules/barcos/config.js?v=2"></script>
+  <script src="modules/barcos/module.js?v=2"></script>
+  <script src="modules/culturas/config.js?v=2"></script>
+  <script src="modules/culturas/module.js?v=2"></script>
+  <script src="modules/rutas/config.js?v=2"></script>
+  <script src="modules/rutas/module.js?v=2"></script>
+  <script src="modules/timeline/config.js?v=2"></script>
+  <script src="modules/timeline/module.js?v=2"></script>
+  <script src="modules/manuscrito/config.js?v=2"></script>
+  <script src="modules/manuscrito/module.js?v=2"></script>
+  <!-- Runtime A7 conservado durante la migración progresiva. -->
+  <script src="app.js?v=modular1"></script>
+  <script src="core/app-legacy.js?v=a688"></script>
 </body>
 </html>

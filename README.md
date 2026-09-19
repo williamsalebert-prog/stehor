@@ -1,169 +1,59 @@
-# Sethoria Atlas — A5 / Plantilla 0
+# Sethoria Writer — Arquitectura modular
 
-Primera ficha modular general del proyecto.
+Esta versión prepara Sethoria Writer para crecer por módulos y para que futuras
+IA puedan trabajar por partes sin cargar todo el proyecto.
 
-## Objetivo
-Crear un esqueleto que pueda manejar Personajes, Grupos, Arcos, Eventos, Lugares/Mapas, Rutas, Batallas, Barcos, Criaturas, Culturas, Armas, Ropa, Objetos, Relaciones, Historia real, Reglas, Música, Fuentes, Notas y otros datos.
+## Plantilla común obligatoria
 
-## Qué cambia
-- La portada y los menús de categorías siguen siendo visuales y compactos.
-- Al abrir un elemento ya no aparece una ficha plana.
-- Cada categoría tiene un **blueprint** propio de pestañas.
-- La ficha comparte una jerarquía visual común:
-  - identidad,
-  - resumen,
-  - pestañas,
-  - módulos,
-  - identificación técnica plegada.
-- Se incorporan:
-  - relaciones explícitas,
-  - detección automática de menciones,
-  - referencias inversas,
-  - cronologías,
-  - datos clave,
-  - galerías/material,
-  - fuentes,
-  - notas,
-  - mapas de imagen con pines manuales.
-- No se añade edición desde la web.
-- Se conserva la misma IndexedDB para seguir siendo compatible con los datos locales del prototipo.
+Todas las fichas de cualquier categoría tienen estas cinco pestañas:
 
-Consulta `PLANTILLA_0.md` para el esquema de datos.
+1. **Descripción**
+2. **Real**
+3. **Participación**
+4. **Galería**
+5. **Investigación**
 
-## Publicación
-No requiere compilación. Puede subirse directamente a GitHub Pages.
+La pestaña **Real** es solo un nombre de plantilla. Su contenido cambia según
+la categoría. Por ejemplo, puede contener genealogía en Personajes, estructura
+temporal en Línea temporal, componentes en Armas o biología en Criaturas.
 
+Descripción, Participación, Galería e Investigación comparten el mismo panel,
+dimensiones, espaciado y comportamiento de edición. Editar/Listo y el gestor
+de etiquetas también son elementos comunes.
 
-## A6 — Personajes, Tanda 0
+## Separación para IA
 
-Primera plantilla específica de Personajes.
+Una IA que trabaje en Personajes debe poder limitarse a:
 
-La ficha adopta una estructura tipo wiki:
-- infobox compacta a la izquierda;
-- artículo principal a la derecha;
-- siete pestañas;
-- campos opcionales;
-- Historia con subtítulos libres;
-- relaciones con notas propias;
-- participación cruzada automática/semi-automática;
-- galería filtrable;
-- investigación separada;
-- identificación técnica plegada.
+- `docs/ARQUITECTURA_MODULAR.txt`
+- `modules/_comun/PLANTILLA_COMUN.txt`
+- `modules/personajes/README.md`
+- `modules/personajes/config.js`
+- archivos concretos que necesite modificar
 
-La aplicación no interpreta el dinamismo narrativo. Toda contextualización de cambios se redacta manualmente por el autor.
+No necesita cargar Lugares, Armas, Timeline, etc. salvo que exista una
+dependencia real.
 
-Consulta `PERSONAJES_TANDA0.md`.
+## Migración
 
+La aplicación A7 existente se conserva en `core/app-legacy.js`. El archivo raíz
+`app.js` es ahora un bootstrap pequeño. Esto permite migrar cada módulo de forma
+progresiva sin destruir las funciones que ya existen.
 
-## A6.1 — equilibrio + demo ampliado de Esteban
-- Campos múltiples simples pueden ser listas, sin subformularios innecesarios.
-- La ficha rápida usa `Relaciones importantes` en vez de obligar a separar Grupo/Pareja.
-- Relaciones admite símbolos opcionales elegidos por el autor.
-- El demo de Esteban fue ampliado con información ya establecida en conversaciones y manuscrito.
-- No se inventaron fecha exacta de nacimiento ni apariencia física.
+La plantilla común está en:
 
+- `modules/_comun/PLANTILLA_COMUN.txt`
+- `modules/_comun/template-contract.js`
+- `docs/PLANTILLA_VISUAL.txt`
 
-## A6.2 — corrección de actualización visible
-- La IndexedDB anterior conservaba los registros `demo-*`, así que el nuevo Esteban podía no cargarse.
-- Ahora se refrescan únicamente las entidades `demo-*` al iniciar.
-- Los datos reales del usuario no se sobrescriben.
-- Se agregaron `?v=a62` a CSS, JavaScript y demo-data para evitar caché vieja en GitHub Pages/navegador.
+Las instrucciones para pedir trabajo por módulo están en:
 
+- `docs/PROMPT_MODULO.txt`
+- `docs/GENERAR_MODULO.txt`
 
-## A6.3 — Personajes / borrador 2
-- Tabla lateral fija con nacionalidad, cultura, idiomas, religión y ocupación.
-- Resumen integrado en Perfil como recuadro introductorio.
-- Pestañas: Perfil, Apariencia, Historia, Lazos, Galería, Participación, Investigación.
-- Revisión visual menos monocromática y con mezcla de vino, petróleo y dorado.
+## Regla de oro
 
+**Lo común se implementa una sola vez. Lo específico vive dentro de su módulo.**
 
-## A6.5 — edición directa
-- No existe modo de edición: los textos se editan directamente en la propia ficha.
-- Historia: añadir/quitar apartados.
-- Lazos: Alianzas, Familia, Enemigos y Otros; añadir/quitar lazos; texto opcional.
-- Galería: añadir/quitar imagen, GIF o video sencillo.
-- Perfil, Apariencia e Historia aceptan multimedia integrada con posición izquierda/centro/derecha y tamaño ajustable.
-- El tamaño permitido se limita automáticamente según proporción, resolución, ancho de página, espacio restante para texto y altura visible.
-- En pantallas estrechas o cuando no queda texto suficiente, los medios laterales se centran automáticamente sin perder la intención guardada.
-- Participación es de solo lectura y se deriva de referencias/hipervínculos presentes en los datos del personaje.
-- Investigación: Personaje Real/Inventado; Estado Nuevo/En desarrollo/Final; Fuentes, Pendientes y Notas editables.
-- Los archivos multimedia seleccionados se guardan como datos dentro de IndexedDB/backup JSON para que no haya que volver a cargarlos localmente.
-
-## A6.6 — Lugares y mapas interactivos
-- Lugares usa ficha rápida y las pestañas: Descripción, Mapas, Historia, Participación, Galería e Investigación.
-- Descripción e Historia conservan edición directa y multimedia de A6.5.
-- Un Lugar admite cero, uno o varios mapas mediante subtabs con nombre libre.
-- Cada mapa admite imagen/GIF base, coordenadas internas relativas, coordenadas geográficas/manuales, origen personalizado, orientación de ejes, rotación y norte.
-- Calibración global: valor por píxel, dimensiones totales, dos puntos, X/Y independientes y varios pares de control.
-- Unidades configurables para distancia, área, velocidad, tiempo y altitud; precisión y tolerancia configurables.
-- Capas y niveles completamente configurables por mapa.
-- Elementos geométricos disponibles: Punto, Línea, Zona y Ruta.
-- Propiedades comunes: categoría, capas, niveles, entidad enlazada, notas, fechas, visibilidad, orden, estilo y multimedia.
-- Puntos: coordenadas, geocoordenadas, altitud, símbolo, tamaño, rotación, etiqueta, radio y dirección.
-- Líneas: nodos, cierre, tipo de trazo, dirección/flechas, longitud calculada, anchura real, suavizado y elevaciones.
-- Zonas: vértices, huecos, partes, área/perímetro, relleno, borde, etiqueta, elevación/altura, zona contenedora y cálculos de contenido.
-- Rutas: origen/destino, waypoints, nodos y niveles, sentido/circularidad, tramos, transportes, velocidades, pausas, condiciones, factores, duración y distancia manuales, fechas e incertidumbre.
-- Generación de rutas como propuesta editable: waypoints, zonas a evitar, líneas/capas preferidas, suavizado, densidad y obstáculos; luego puede aceptarse o corregirse moviendo nodos.
-- Cálculos derivados: longitudes, áreas, perímetros, volumen aproximado, distancia entre puntos, distancia/duración/velocidad media de rutas, zonas atravesadas, porcentaje aproximado dentro de zonas, niveles y desnivel cuando hay datos.
-
-
-## A6.6.1 — revisión QA de Lugares/Mapas
-Correcciones funcionales: regex de rutas internas y extensiones; cancelación de herramientas; bloqueo de dibujo sin imagen base; validación mínima de geometrías; huecos reales en zonas; intersecciones robustas; limpieza de referencias al borrar elementos/capas/niveles; aplicación del nivel predeterminado; orden visual de capas; transporte predeterminado en rutas; cálculo por tramos con intervalos de velocidad; límites de zoom normalizados.
-
-
-## A6.6.2 — edición/lectura, multimedia y base limpia
-- Modo normal y modo Editar global.
-- Modo normal oculta controles de edición y bloquea edición directa.
-- Retrato/portada editable y reutilizado en tarjetas de categoría.
-- Multimedia anclada después de párrafos, con izquierda/centro/derecha, tamaños mínimos menores y movimiento entre párrafos.
-- Se eliminan demos del paquete y se migran fuera de IndexedDB una sola vez.
-- Categorías arrancan vacías y se prueban sobre datos reales locales.
-- Mapas conservan navegación/zoom en modo normal y muestran edición avanzada solo en modo Editar.
-
-
-## A6.6.4 — multimedia y recuperación
-- Ctrl+Z/Ctrl+Y para cambios ya guardados en la wiki; dentro de un campo de texto se conserva el deshacer nativo del navegador.
-- Multimedia lateral con ajuste de texto tipo cuadrado y movimiento por líneas que atraviesa párrafos.
-- Selección múltiple: varias imágenes añadidas juntas se organizan como fila horizontal centrada.
-- Nueva posición `Fila` para combinar multimedia centrada horizontalmente.
-- El botón Multimedia intenta usar el último párrafo editado del apartado como punto de inserción.
-- Herramienta `Archivos cargados` para localizar y quitar multimedia almacenada en entidades, mapas, galerías o portadas.
-
-
-## A6.6.5 — Multimedia por arrastre asistido
-- Se eliminaron las flechas de posición y desplazamiento.
-- La imagen/GIF/video se mueve directamente arrastrándolo.
-- El programa interpreta izquierda, derecha o bloque centrado según posición, tamaño y espacio disponible.
-- Izquierda/derecha usan ajuste de texto; el bloque centrado ocupa una fila propia y admite una o varias imágenes.
-- La altura de caída dentro de un párrafo se convierte en anclaje y desplazamiento por líneas para conservar control vertical.
-- Se conserva el deslizador de tamaño y el botón de quitar.
-
-
-## A6.6.6 — flujo lateral multimedia
-- El arrastre vertical calcula la posición por el borde superior real de la multimedia, no por el punto donde se agarró.
-- Las laterales se ajustan a líneas completas mediante offset en píxeles.
-- El tamaño máximo lateral también considera cuánto texto queda debajo del punto de inserción, reduciendo espacios muertos excesivos.
-- Si ya no cabe una lateral útil dentro de sus límites, se muestra centrada.
-
-
-## A6.6.7 — estabilidad de multimedia
-- El tamaño elegido deja de variar según la cantidad de texto restante.
-- Si una imagen lateral dejaría un hueco muerto, conserva tamaño y se recoloca hacia arriba lo mínimo necesario.
-- Si ni desde el inicio cabe junto al texto, pasa a bloque centrado en vez de encogerse.
-- El mismo comportamiento se aplica al arrastrar y al cambiar el tamaño.
-
-
-## A6.6.8 — reconstrucción del flujo multimedia
-- Se eliminó el autoencogido visual: el porcentaje elegido por el usuario ya no cambia por modo, cantidad de texto o agrupación.
-- Los controles de edición se superponen a la imagen y ya no cambian la altura usada para envolver texto.
-- Las posiciones laterales se validan contra una maqueta invisible de texto limpio; si quedaría cola vacía, la imagen sube línea por línea.
-- Si ninguna línea puede evitar el hueco, la imagen pasa a bloque centrado conservando su tamaño.
-- Se reparan silenciosamente posiciones laterales antiguas al abrir la sección.
-
-
-## A6.6.9 — corrección lateral determinista
-- Izquierda/derecha ya no se convierten automáticamente a centro en escritorio.
-- El tamaño no provoca recolocación automática al soltar el deslizador.
-- Tras guardar no existe una segunda reparación silenciosa que cambie la posición.
-- Al arrastrar lateralmente, el asistente solo puede subir la imagen para reducir hueco; nunca cambia lado, centro ni tamaño.
-- La zona de detección lateral es más permisiva (44% izquierda / 12% centro / 44% derecha).
+Si un cambio requiere tocar algo común, primero se identifica el contrato
+compartido y después se hace el cambio común de forma explícita.
